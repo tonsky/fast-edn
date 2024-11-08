@@ -1,7 +1,9 @@
 (ns better-clojure.edn
   (:refer-clojure :exclude [read read-string])
   (:require
-   [clojure.edn :as edn]))
+   [clojure.edn :as edn])
+  (:import
+   [better_clojure.edn CharReader EDNReader]))
 
 (defn read
   "Reads the next object from stream. stream defaults to the
@@ -23,6 +25,9 @@
   ([opts stream]
    (edn/read stream opts)))
 
+(defn reader ^EDNReader [opts]
+  (EDNReader. (not (contains? opts :eof)) (:eof opts)))
+
 (defn read-string
   "Reads one object from the string s. Returns nil when s is nil or empty.
 
@@ -32,6 +37,8 @@
   opts is a map as per clojure.edn/read"
   ([s]
    (read-string {:eof nil} s))
-  ([opts s]
+  ([opts ^String s]
    (when s
-     (edn/read-string opts s))))
+     (let [rdr (reader opts)]
+       (.beginParse rdr (CharReader. s))
+       (.readObject rdr)))))
