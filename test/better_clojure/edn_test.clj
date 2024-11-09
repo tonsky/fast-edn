@@ -165,7 +165,8 @@
   (are [s] (thrown? Exception (edn/read-string s))
     "08"
     "0x"
-    "0xG"))
+    "0xG"
+    "1n"))
   
 
 (deftest floats-test
@@ -209,6 +210,7 @@
   (Double/.isNaN (edn/read-string "##NaN"))
   
   (are [s] (thrown? Exception (edn/read-string s))
+    "1m"
     "1.1.1"
     "1E2.3"
     "1E2E3"

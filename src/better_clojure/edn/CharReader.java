@@ -49,12 +49,20 @@ public final class CharReader {
     return bufferLength() - curPos;
   }
 
+  public static boolean isWhitespace(int ch) {
+    return Character.isWhitespace(ch) || ch == ',';
+  }
+
+  public static boolean isBoundary(int ch) {
+    return Character.isWhitespace(ch) || ch == ',' || ch == ']' || ch == '}' || ch == ')' || ch == '[' || ch == '{' || ch == '(' || ch == '#';
+  }
+
   public final char eatwhite() {
     char[] buffer = curBuffer;
     while (buffer != null) {
       final int len = buffer.length;
       int pos = curPos;
-      for (; pos < len && Character.isWhitespace(buffer[pos]); ++pos);
+      for (; pos < len && isWhitespace(buffer[pos]); ++pos);
       if (pos < len) {
         final char retval = buffer[pos];
         position(pos + 1);
@@ -89,9 +97,7 @@ public final class CharReader {
   public final int read() {
     // common case
     if (remaining() > 0) {
-      char retval = curBuffer[curPos];
-      ++curPos;
-      return retval;
+      return curBuffer[curPos++];
     } else {
       nextBuffer();
       if (eof())
@@ -142,10 +148,14 @@ public final class CharReader {
   // Reads anything possible around the area.
   public final String context(int nChars) throws Exception {
     final char[] buf = buffer();
-    final int pos = position();
-    final int len = buf.length;
-    int startpos = Math.max(0, pos - nChars);
-    int endpos = Math.min(len - 1, pos + nChars);
-    return new String(buf, startpos, endpos - startpos);
+    if (buf != null) {
+      final int pos = position();
+      final int len = buf.length;
+      int startpos = Math.max(0, pos - nChars);
+      int endpos = Math.min(len - 1, pos + nChars);
+      return new String(buf, startpos, endpos - startpos);
+    } else {
+      return null;
+    }
   }
 }

@@ -7,13 +7,14 @@
 
 (defn reload []
   (virgil/compile-java ["src/better_clojure"])
-  (duti/reload))
+  (duti/reload {:only :all}))
 
 (def -main
   duti/-main)
 
 (defn test-all []
   (virgil/compile-java ["src/better_clojure"])
+  (duti/reload {:only :all})
   (duti/test #"better-clojure\..*-test"))
 
 (defn -test-main [_]

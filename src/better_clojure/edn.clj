@@ -42,3 +42,57 @@
      (let [rdr (reader opts)]
        (.beginParse rdr (CharReader. s))
        (.readObject rdr)))))
+
+(require
+  '[clojure.test :refer [deftest is are testing]])
+
+(deftest reader-test
+  (are [s v] (= v (read-string s))
+    ""    nil
+    " "   nil
+    ","   nil
+    "123" 123
+    "0"   0
+    "-1"  -1
+    "+1"  +1
+    "-0"  0
+    
+    "{}" {}
+    "{\"key\" \"value\"}" {"key" "value"}
+    "{1 2, 3 4}" {1 2, 3 4}
+    
+    "()" ()
+    "(1 2 3)" '(1 2 3)
+    "(,\n1,2\n, \n3\n   )" '(1 2 3)
+  
+    "[]" []
+    "[1 2 3]" '[1 2 3]
+    "[,\n1,2\n, \n3\n   ]" '[1 2 3]
+    
+    "#{}" #{}
+    "#{1 2 3}" '#{1 2 3}
+    "#{,\n1,2\n, \n3\n   }" '#{1 2 3})
+  
+  (are [s c m] (thrown-with-msg? c m (read-string s))
+    "{"          RuntimeException         #"EOF while reading map"
+    "{1}"        RuntimeException         #"Map literal must contain an even number of forms"
+    "{1 2, 3}"   RuntimeException         #"Map literal must contain an even number of forms"
+    "}"          Exception                #"Parse error - Unexpected character - \}"
+    "{1 2, 1 3}" IllegalArgumentException #"Duplicate key: 1"
+    "("          RuntimeException         #"EOF while reading list"
+    "(1 2"       RuntimeException         #"EOF while reading list"
+    "["          RuntimeException         #"EOF while reading vector"
+    "[1 2"       RuntimeException         #"EOF while reading vector"
+    "#{"         RuntimeException         #"EOF while reading set"
+    "#{1 2"      RuntimeException         #"EOF while reading set"
+    "#{1 2 1}"   IllegalArgumentException #"Duplicate key: 1"
+    "#"          RuntimeException         #"EOF while reading dispatch macro")
+  )
+
+(clojure.test/test-ns *ns*)
+
+(comment
+  (read-string "123")
+  
+  (clojure.edn/read-string "#")
+  )
