@@ -110,7 +110,8 @@
 
 (comment
   (Double/parseDouble ".")
-  (read-string "0xFFN")
+  (read-string "-0")
+  (Long/parseLong "FFFFFFFFFFFFFFFFFF" 16)
   
   (count (Long/toString Long/MAX_VALUE 16))
   (count (Long/toString Long/MAX_VALUE 8))

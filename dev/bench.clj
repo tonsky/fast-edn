@@ -95,7 +95,12 @@
 
 (comment
   (gen-ints 1400)
-  (bench-edn {:pattern #"ints_1400\.edn"}))
+  (bench-edn {:pattern #"ints_1400\.edn"})
+  (let [s (slurp "dev/data/ints_1400.edn")]
+    (duti/bench
+      (edn2/read-string s))
+    (duti/profile-for 30000
+      (edn2/read-string s))))
 
 ; ┌────────────────┬─────────────┐
 ; │ ints           │        1400 │

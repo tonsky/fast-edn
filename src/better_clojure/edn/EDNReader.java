@@ -279,47 +279,47 @@ public final class EDNReader {
     }
   }
 
-  public Number parseLong(char[] chars, int start, int end, int radix) {
-    int len = end - start;
+  final Object finalizeInt(char[] chars, int start, int end, int radixPos) throws Exception {
+    int radix = 10;
+    boolean forceBigInt = false;
+
+    if (radixPos >= 0) {
+      radix = (int) Long.parseLong(new WrappedCharSequence(chars), start, start + radixPos, 10);
+      start = start + radixPos + 1;
+    }
+
     if (chars[end - 1] == 'N') {
-      final String str = new String(chars, start, len - 1);
+      forceBigInt = true;
+      end = end - 1;
+    }
+
+    if (end == start + 1 && !forceBigInt) {
+      return Long.valueOf(Character.digit(chars[start], radix));
+    }
+
+    if (chars[start] == '0') {
+      if (end - start >= 3 && chars[start + 1] == 'x' || chars[start + 1] == 'X') {
+        radix = 16;
+        start = start + 2;
+      } else if (end - start >= 2) {
+        radix = 8;
+        start = start + 1;
+      }
+    }
+
+    if (forceBigInt) {
+      final String str = new String(chars, start, end - start);
       BigInteger bn = new BigInteger(str, radix);
       return BigInt.fromBigInteger(bn);
     }
 
-    if ((radix == 10 && len <= 18) || (radix == 16 && len <= 15) || (radix == 8 && radix <= 21)) {
+    try {
       return Long.valueOf(Long.parseLong(new WrappedCharSequence(chars), start, end, radix));
+    } catch (Exception e) {
+      final String str = new String(chars, start, end - start);
+      BigInteger bn = new BigInteger(str, radix);
+      return BigInt.fromBigInteger(bn);
     }
-
-    final String str = new String(chars, start, len);
-    BigInteger bn = new BigInteger(str, radix);
-    return bn.bitLength() < 64 ? Numbers.num(bn.longValue()) : BigInt.fromBigInteger(bn);
-  }
-
-  final Object finalizeInt(char[] chars, int start, int end, int radixPos) throws Exception {
-    final int len = end - start;
-    if (len == 1) {
-      return Long.valueOf(Character.digit(chars[start], 10));
-    }
-
-    if (radixPos >= 0) {
-      int radix = parseLong(chars, start, start + radixPos, 10).intValue();
-      return parseLong(chars, start + radixPos + 1, end, radix);
-    }
-
-    if (chars[start] == '0') {
-      if (len < 2) {
-        throw Util.runtimeException("Invalid number: " + new String(chars, start, len));
-      }
-
-      if (chars[start + 1] == 'x' || chars[start + 1] == 'X') {
-        return parseLong(chars, start + 2, end, 16);
-      }
-
-      return parseLong(chars, start + 1, end, 8);
-    }
-
-    return parseLong(chars, start, end, 10);
   }
 
   final Object finalizeFloat(char[] chars, int start, int end) throws Exception {
