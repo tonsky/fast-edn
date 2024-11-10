@@ -49,12 +49,20 @@ public final class CharReader {
     return bufferLength() - curPos;
   }
 
-  public static boolean isWhitespace(int ch) {
-    return Character.isWhitespace(ch) || ch == ',';
+  public static boolean isWhitespace(char ch) {
+    return ch == ',' || Character.isWhitespace(ch);
   }
 
-  public static boolean isBoundary(int ch) {
-    return Character.isWhitespace(ch) || ch == ',' || ch == ']' || ch == '}' || ch == ')' || ch == '[' || ch == '{' || ch == '(' || ch == '#';
+  public static boolean isBoundary(char ch) {
+    return isWhitespace(ch) || ch == ']' || ch == '}' || ch == ')' || ch == '[' || ch == '{' || ch == '(' || ch == '#';
+  }
+
+  public static boolean isNumberChar(char v) {
+    return (v >= '0' && v <= '9') || v == '-' || v == '+';
+  }
+
+  public static boolean isDigit(char v) {
+    return v >= '0' && v <= '9';
   }
 
   public final char eatwhite() {

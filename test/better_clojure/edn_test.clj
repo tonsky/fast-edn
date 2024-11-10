@@ -122,7 +122,10 @@
 
 
 (deftest integers-test
-  (are [s e] (= e (edn/read-string s))
+  (are [s e] (let [v (edn/read-string s)]
+               (and
+                 (= e v)
+                 (= (class e) (class v))))
     "0"      0
     "1"      1
     "123"    123
@@ -141,17 +144,21 @@
     "-0N"     -0N
     "-1N"     -1N
     "-123N"   -123N
+    "10000000000000000000" 10000000000000000000
     
     ;; not in spec
     "07"     07
     "0xFF"   0xFF
     "0xff"   0xff
+    "0XFF"   0XFF
+    "0Xff"   0Xff
     "+07"    +07
     "+0xFF"  +0xFF
     "+0xff"  +0xff
     "-07"    -07
     "-0xFF"  -0xFF
     "-0xff"  -0xff
+    
     "07N"     07N
     "0xFFN"   0xFFN
     "0xffN"   0xffN
@@ -160,14 +167,21 @@
     "+0xffN"  +0xffN
     "-07N"    -07N
     "-0xFFN"  -0xFFN
-    "-0xffN"  -0xffN)
+    "-0xffN"  -0xffN
+    
+    "2r1111"  2r1111
+    "2R1111"  2R1111
+    "36rabcxyz" 36rabcxyz
+    "36Rabcxyz" 36rabcxyz
+    "36rABCXYZ" 36rABCXYZ
+    "36RABCXYZ" 36RABCXYZ)
   
   (are [s] (thrown? Exception (edn/read-string s))
     "08"
     "0x"
     "0xG"
-    "1n"))
-  
+    "1n"
+    "2r1111N"))
 
 (deftest floats-test
   (are [s e] (= e (edn/read-string s))
@@ -341,6 +355,7 @@
     "#inst \"1985-04-12T23:20:50.\""
     "#inst \"1985-04-12t23:20:50.52z\""
     "#inst \"1985-04-12 23:20:50.52Z\""))
+
 
 (deftest uuids-test
   (are [s e] (= e (edn/read-string s))

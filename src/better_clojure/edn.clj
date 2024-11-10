@@ -51,11 +51,28 @@
     ""    nil
     " "   nil
     ","   nil
+    
     "123" 123
     "0"   0
     "-1"  -1
     "+1"  +1
     "-0"  0
+    "123N" 123N
+    "10000000000000000000" 10000000000000000000
+    
+    "0xAB" 0xAB
+    "0XAB" 0XAB
+    "010"  010
+    "+0xAB" +0xAB
+    "+0XAB" +0XAB
+    "+010"  +010
+    "-0xAB" -0xAB
+    "-0XAB" -0XAB
+    "-010"  -010
+    
+    "2r1111" 2r1111
+    "36rabcxyz" 36rabcxyz
+
     
     "{}" {}
     "{\"key\" \"value\"}" {"key" "value"}
@@ -89,10 +106,19 @@
     "#"          RuntimeException         #"EOF while reading dispatch macro")
   )
 
-(clojure.test/test-ns *ns*)
+#_(clojure.test/test-ns *ns*)
 
 (comment
-  (read-string "123")
-  
-  (clojure.edn/read-string "#")
+  (Double/parseDouble ".")
+  (read-string "2r1111")
+  (read-string "[11    ]")
+  (read-string "123N")
+  (read-string "[123 ]")
+  (type 123N)
+  (java.math.BigInteger. "-123")
+  (clojure.edn/read-string "0x")
+  (clojure.edn/read-string "2r1111")
+  (clojure.edn/read-string "36rabcxyz")
+  (type (clojure.edn/read-string "1m"))
+  (type (clojure.edn/read-string "36r1M"))
   )

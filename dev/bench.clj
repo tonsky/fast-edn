@@ -1,5 +1,6 @@
 (ns bench
   (:require
+   [better-clojure.edn :as edn2]
    [charred.api :as charred]
    [cheshire.core :as cheshire]
    [clojure.edn :as edn]
@@ -53,8 +54,9 @@
                  (->> (sort-by File/.getName)))
           :let [content (slurp file)]]
     (duti/benching (File/.getName file)
-      (doseq [[name parse-fn] [["clojure.edn" edn/read-string]
-                               ["tools.reader" tools/read-string]]]
+      (doseq [[name parse-fn] [#_["clojure.edn" edn/read-string]
+                               #_["tools.reader" tools/read-string]
+                               ["better-clojure" edn2/read-string]]]
         (duti/benching name
           (duti/bench
             (parse-fn content)))))))
@@ -72,3 +74,31 @@
 
 (comment
   (bench-edn {:prefix "edn_full"}))
+
+(defn rand-num ^String [max-len]
+  (let [len (rand-nth (for [i (range 1 (inc max-len))
+                            n (repeat (- max-len i) i)]
+                        n))]
+    (str/join (concat
+                [(rand-nth ["" "" "" "" "" "" "" "" "" "" "-"])
+                 (rand-nth "123456789")]
+                (repeatedly (- len 1) #(rand-nth "0123456789"))))))
+
+(defn gen-ints [cnt]
+  (with-open [w (io/writer (str "dev/data/ints_" cnt ".edn"))]
+    (.write w "[")
+    (dotimes [_ cnt]
+      (.write w (rand-num 18))
+      (.write w " "))
+    (.write w "]")))
+
+(comment
+  (gen-ints 1400)
+  (bench-edn {:prefix "ints"}))
+
+; ┌────────────────┬─────────────┐
+; │                │        1400 │
+; │────────────────┼─────────────┤
+; │ clojure.edn    │  426.189 μs │
+; │ better-clojure │   48.737 μs │
+; └────────────────┴─────────────┘

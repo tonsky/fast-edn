@@ -2,10 +2,12 @@ package better_clojure.edn;
 
 import clojure.lang.ATransientMap;
 import clojure.lang.ATransientSet;
+import clojure.lang.BigInt;
 import clojure.lang.IPersistentList;
 import clojure.lang.ITransientCollection;
 import clojure.lang.Keyword;
 import clojure.lang.LazilyPersistentVector;
+import clojure.lang.Numbers;
 import clojure.lang.PersistentArrayMap;
 import clojure.lang.PersistentHashMap;
 import clojure.lang.PersistentHashSet;
@@ -30,13 +32,6 @@ public final class EDNReader {
   public EDNReader(boolean _throwOnEOF, Object _eofValue) {
     throwOnEOF = _throwOnEOF;
     eofValue = _eofValue;
-  }
-
-  public static boolean numberChar(char v) {
-    return (v >= '0' && v <= '9') || v == '-' || v == '+';
-  }
-  public static boolean isAsciiDigit(char v) {
-    return v >= '0' && v <= '9';
   }
 
   final char[] tempRead(int nchars) throws EOFException {
@@ -104,80 +99,123 @@ public final class EDNReader {
     throw new EOFException("Parse error - EOF while reading string: " + charBuffer.toString());
   }
 
-  final Object finalizeNumber(CharBuffer cb, boolean integer, final char firstChar, final int dotIndex)
-      throws Exception {
-    final char[] cbBuffer = cb.buffer();
-    final int nElems = cb.length();
-    if (integer) {
-      // Definitely an integer
-      if ((nElems > 1 && firstChar == '0') || (nElems > 2 && firstChar == '-' && cbBuffer[1] == '0'))
-        throw new Exception("Parse error - integer starting with 0: " + cb.toString());
-      if (nElems == 1) {
-        long retval = Character.digit(cbBuffer[0], 10);
-        if (retval < 0)
-          throw new Exception("Parse error - invalid integer: " + cb.toString());
-        return retval;
-      } else {
-        final String strdata = cb.toString();
-        if (nElems < 18)
-          return Long.parseLong(strdata);
-        else {
-          try {
-            return Long.parseLong(strdata);
-          } catch (Exception e) {
-            return new BigInteger(strdata);
-          }
+  final Object readNumber() throws Exception {
+    boolean usedBuffer = false;
+    boolean isInt      = false;
+    boolean isFloat    = false;
+    char[]  buffer     = reader.buffer();
+    int     startpos   = reader.position();
+    int     pos        = startpos;
+    int     len        = buffer.length;
+    int     radixPos   = -1;
+    outer:
+    while (buffer != null) {
+      for (; pos < len; ++pos) {
+        final char nextChar = buffer[pos];
+        if (CharReader.isDigit(nextChar)) {
+          continue;
+        } else if (CharReader.isBoundary(nextChar)) {
+          reader.position(pos);
+          break outer;
+        } else if (!isInt && !isFloat && (nextChar == '.' || nextChar == 'e' || nextChar == 'E' || nextChar == 'M')) {
+          isFloat = true;
+        } else if (!isInt && !isFloat && (nextChar == 'x' || nextChar == 'X' || nextChar == 'N')) {
+          isInt = true;
+        } else if (radixPos == -1 && (nextChar == 'r' || nextChar == 'R')) {
+          radixPos = (usedBuffer ? charBuffer.length() : 0) + pos - startpos;
+          isInt = true;
         }
       }
-    } else {
-      final String strdata = cb.toString();
-      if (dotIndex != -1) {
-        final char bufChar = cbBuffer[dotIndex];
-        // sanity check
-        if (bufChar != '.')
-          throw new RuntimeException(
-              "Programming error - dotIndex incorrect: " + String.valueOf(dotIndex) + " - " + strdata);
-        // If there is a period it must have a number on each side.
-        if (dotIndex == nElems - 1 || !isAsciiDigit(cbBuffer[dotIndex + 1]) || dotIndex == 0
-            || !isAsciiDigit(cbBuffer[dotIndex - 1]))
-          throw new Exception("Parse error - period must be preceded and followed by a digit: " + strdata);
+      char[] nextBuffer = reader.nextBuffer();
+      if (nextBuffer == null) {
+        break;
       }
-      return Double.parseDouble(strdata);
+      if (!usedBuffer) {
+        usedBuffer = true;
+        charBuffer.clear();
+      }
+      charBuffer.append(buffer, startpos, pos);
+      buffer   = nextBuffer;
+      startpos = reader.position();
+      pos      = startpos;
+      len      = buffer.length;
+    }
+
+    if (usedBuffer && isFloat) {
+      charBuffer.append(buffer, startpos, pos);
+      return finalizeFloat(charBuffer.buffer, 0, charBuffer.len);
+    } else if (usedBuffer) {
+      charBuffer.append(buffer, startpos, pos);
+      return finalizeInt(charBuffer.buffer, 0, charBuffer.len, radixPos);
+    } else if (isFloat) {
+      return finalizeFloat(buffer, startpos, pos);
+    } else {
+      return finalizeInt(buffer, startpos, pos, radixPos);
     }
   }
 
-  final Object readNumber(final char firstChar) throws Exception {
-    charBuffer.clear();
-    charBuffer.append(firstChar);
-    boolean integer = true;
-    char[] buffer = reader.buffer();
-    int dotIndex = -1;
-    while (buffer != null) {
-      int startpos = reader.position();
-      int pos = startpos;
-      int len = buffer.length;
-      for (; pos < len; ++pos) {
-        final char nextChar = buffer[pos];
-        if (CharReader.isBoundary(nextChar)) {
-          charBuffer.append(buffer, startpos, pos);
-          // Note that we do not increment position here as the next method
-          // needs to restart parsing from this place.
-          reader.position(pos);
-          return finalizeNumber(charBuffer, integer, firstChar, dotIndex);
-        } else if (nextChar == 'e' || nextChar == 'E' || nextChar == '.') {
-          if (nextChar == '.') {
-            // if appending in blocks
-            dotIndex = charBuffer.length() + pos - startpos;
-            // if appending in singles
-            // dotIndex = charBuffer.length() - 1;
-          }
-          integer = false;
-        }
-      }
-      charBuffer.append(buffer, startpos, pos);
-      buffer = reader.nextBuffer();
+  public Long parseLong(char[] chars, int start, int end, int radix) {
+    return Long.valueOf(Long.parseLong(new WrappedCharSequence(chars), start, end, radix));
+  }
+
+  final Object finalizeInt(char[] chars, int start, int end, int radixPos) throws Exception {
+    final int len = end - start;
+    if (len == 1) {
+      return Long.valueOf(Character.digit(chars[start], 10));
     }
-    return finalizeNumber(charBuffer, integer, firstChar, dotIndex);
+
+    if (chars[start] == '-') {
+      Object res = finalizeInt(chars, start + 1, end, radixPos - 1);
+      if (res instanceof Long) {
+        return Long.valueOf(-((Long) res).longValue());
+      } else {
+        return BigInt.fromBigInteger(((BigInt) res).toBigInteger().negate());
+      }
+    }
+
+    if (chars[start] == '+') {
+      return finalizeInt(chars, start + 1, end, radixPos - 1);
+    }
+
+    if (radixPos >= 0) {
+      int radix = parseLong(chars, start, start + radixPos, 10).intValue();
+      return parseLong(chars, start + radixPos + 1, end, radix);
+    }
+
+    if (chars[start] == '0') {
+      if (len < 2) {
+        throw Util.runtimeException("Invalid number: " + new String(chars, start, len));
+      }
+
+      if (chars[start + 1] == 'x' || chars[start + 1] == 'X') {
+        return parseLong(chars, start + 2, end, 16);
+      }
+
+      return parseLong(chars, start + 1, end, 8);
+    }
+
+    if (chars[end - 1] == 'N') {
+      final String str = new String(chars, start, len - 1);
+      BigInteger bn = new BigInteger(str);
+      return BigInt.fromBigInteger(bn);
+    }
+
+    if (len <= 18) {
+      return parseLong(chars, start, end, 10);
+    }
+
+    final String str = new String(chars, start, len);
+    BigInteger bn = new BigInteger(str);
+    return bn.bitLength() < 64 ? Numbers.num(bn.longValue()) : BigInt.fromBigInteger(bn);
+  }
+
+  final Object finalizeFloat(char[] chars, int start, int end) throws Exception {
+    final int len = end - start;
+    if (chars[end - 1] == 'M') {
+      return new BigDecimal(chars, start, len);
+    } else {
+      return Double.parseDouble(new String(chars, start, len));
+    }
   }
 
   public final String context() throws Exception {
@@ -283,8 +321,9 @@ public final class EDNReader {
       return null;
 
     final char val = reader.eatwhite();
-    if (numberChar(val)) {
-      return readNumber(val);
+    if (CharReader.isNumberChar(val)) {
+      reader.unread();
+      return readNumber();
     } else {
       switch (val) {
         case '"':
