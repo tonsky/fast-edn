@@ -100,13 +100,19 @@ public final class EDNReader {
     throw new EOFException("Parse error - EOF while reading string: " + charBuffer.toString());
   }
 
-  final Object readSymbol() throws Exception {
+  final Object readSymbol(int firstChar) throws Exception {
     boolean usedBuffer = false;
     char[]  buffer     = reader.buffer();
     int     startpos   = reader.position();
     int     pos        = startpos;
     int     len        = buffer.length;
     int     slashPos   = -1;
+
+    if (firstChar >= 0) {
+      charBuffer.clear();
+      charBuffer.append((char) firstChar);
+      usedBuffer = true;
+    }
 
     outer:
     while (buffer != null) {
@@ -273,27 +279,27 @@ public final class EDNReader {
     }
   }
 
-  public Long parseLong(char[] chars, int start, int end, int radix) {
-    return Long.valueOf(Long.parseLong(new WrappedCharSequence(chars), start, end, radix));
+  public Number parseLong(char[] chars, int start, int end, int radix) {
+    int len = end - start;
+    if (chars[end - 1] == 'N') {
+      final String str = new String(chars, start, len - 1);
+      BigInteger bn = new BigInteger(str, radix);
+      return BigInt.fromBigInteger(bn);
+    }
+
+    if ((radix == 10 && len <= 18) || (radix == 16 && len <= 15) || (radix == 8 && radix <= 21)) {
+      return Long.valueOf(Long.parseLong(new WrappedCharSequence(chars), start, end, radix));
+    }
+
+    final String str = new String(chars, start, len);
+    BigInteger bn = new BigInteger(str, radix);
+    return bn.bitLength() < 64 ? Numbers.num(bn.longValue()) : BigInt.fromBigInteger(bn);
   }
 
   final Object finalizeInt(char[] chars, int start, int end, int radixPos) throws Exception {
     final int len = end - start;
     if (len == 1) {
       return Long.valueOf(Character.digit(chars[start], 10));
-    }
-
-    if (chars[start] == '-') {
-      Object res = finalizeInt(chars, start + 1, end, radixPos - 1);
-      if (res instanceof Long) {
-        return Long.valueOf(-((Long) res).longValue());
-      } else {
-        return BigInt.fromBigInteger(((BigInt) res).toBigInteger().negate());
-      }
-    }
-
-    if (chars[start] == '+') {
-      return finalizeInt(chars, start + 1, end, radixPos - 1);
     }
 
     if (radixPos >= 0) {
@@ -313,19 +319,7 @@ public final class EDNReader {
       return parseLong(chars, start + 1, end, 8);
     }
 
-    if (chars[end - 1] == 'N') {
-      final String str = new String(chars, start, len - 1);
-      BigInteger bn = new BigInteger(str);
-      return BigInt.fromBigInteger(bn);
-    }
-
-    if (len <= 18) {
-      return parseLong(chars, start, end, 10);
-    }
-
-    final String str = new String(chars, start, len);
-    BigInteger bn = new BigInteger(str);
-    return bn.bitLength() < 64 ? Numbers.num(bn.longValue()) : BigInt.fromBigInteger(bn);
+    return parseLong(chars, start, end, 10);
   }
 
   final Object finalizeFloat(char[] chars, int start, int end) throws Exception {
@@ -444,7 +438,7 @@ public final class EDNReader {
       return null;
 
     while (true) {
-      char val = reader.eatwhite();
+      int val = reader.eatwhite();
       switch (val) {
       case '"':
         return readString();
@@ -462,6 +456,41 @@ public final class EDNReader {
       case ';': {
         reader.eat(ch -> '\n' != ch && '\r' != ch);
         continue;
+      }
+      case '-': {
+        val = reader.read();
+        if (-1 == val || CharReader.isBoundary(val)) {
+          return Symbol.intern(null, "-");
+        }
+        if (CharReader.isDigit(val)) {
+          reader.unread();
+          Object res = readNumber();
+          if (res instanceof Long) {
+            return Long.valueOf(-((Long) res).longValue());
+          } else if (res instanceof Double) {
+            return Double.valueOf(-((Double) res).doubleValue());
+          } else if (res instanceof BigInt) {
+            return BigInt.fromBigInteger(((BigInt) res).toBigInteger().negate());
+          } else if (res instanceof BigDecimal) {
+            return ((BigDecimal) res).negate();
+          }
+        } else {
+          reader.unread();
+          return readSymbol('-');
+        }
+      }
+      case '+': {
+        val = reader.read();
+        if (-1 == val || CharReader.isBoundary(val)) {
+          return Symbol.intern(null, "+");
+        }
+        if (CharReader.isDigit(val)) {
+          reader.unread();
+          return readNumber();
+        } else {
+          reader.unread();
+          return readSymbol('+');
+        }
       }
       case '#': {
         final int nextChar = reader.read();
@@ -499,13 +528,12 @@ public final class EDNReader {
         }
         // fallthrough intentional
       default:
-        // TODO symbols starting with -/+
         if (CharReader.isNumberChar(val)) {
           reader.unread();
           return readNumber();
         } else if (!CharReader.isBoundary(val)) {
           reader.unread();
-          return readSymbol();
+          return readSymbol(-1);
         }
         throw new Exception("Parse error - Unexpected character - " + val);
       }

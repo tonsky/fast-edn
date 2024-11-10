@@ -110,7 +110,10 @@
 
 (comment
   (Double/parseDouble ".")
-  (name (read-string ":kw/ns"))
+  (read-string "0xFFN")
+  
+  (count (Long/toString Long/MAX_VALUE 16))
+  (count (Long/toString Long/MAX_VALUE 8))
   (read-string "{:a ; }\n :b}")
   (read-string "[11    ]")
   (read-string "123N")
