@@ -13,6 +13,7 @@ import clojure.lang.PersistentHashMap;
 import clojure.lang.PersistentHashSet;
 import clojure.lang.PersistentList;
 import clojure.lang.PersistentVector;
+import clojure.lang.Symbol;
 import clojure.lang.Util;
 import java.io.EOFException;
 import java.math.BigDecimal;
@@ -35,6 +36,7 @@ public final class EDNReader {
   }
 
   final char[] tempRead(int nchars) throws EOFException {
+    // TODO share buf
     final char[] tempBuf = new char[nchars];
     if (reader.read(tempBuf, 0, nchars) == -1)
       throw new EOFException();
@@ -97,6 +99,124 @@ public final class EDNReader {
       buffer = reader.nextBuffer();
     }
     throw new EOFException("Parse error - EOF while reading string: " + charBuffer.toString());
+  }
+
+  final Object readSymbol() throws Exception {
+    boolean usedBuffer = false;
+    char[]  buffer     = reader.buffer();
+    int     startpos   = reader.position();
+    int     pos        = startpos;
+    int     len        = buffer.length;
+    int     slashPos   = -1;
+
+    outer:
+    while (buffer != null) {
+      for (; pos < len; ++pos) {
+        final char nextChar = buffer[pos];
+        if (slashPos == -1 && '/' == nextChar) {
+          slashPos = (usedBuffer ? charBuffer.length() : 0) + pos - startpos;
+        } else if (CharReader.isBoundary(nextChar)) {
+          reader.position(pos);
+          break outer;
+        }
+      }
+      char[] nextBuffer = reader.nextBuffer();
+      if (nextBuffer == null) {
+        break;
+      }
+      if (!usedBuffer) {
+        usedBuffer = true;
+        charBuffer.clear();
+      }
+      charBuffer.append(buffer, startpos, pos);
+      buffer   = nextBuffer;
+      startpos = reader.position();
+      pos      = startpos;
+      len      = buffer.length;
+    }
+
+    char[] chars;
+    int start, end;
+    if (usedBuffer) {
+      charBuffer.append(buffer, startpos, pos);
+      chars = charBuffer.buffer;
+      start = 0;
+      end = charBuffer.len;
+    } else {
+      chars = buffer;
+      start = startpos;
+      end = pos;
+    }
+
+    if (3 == end - start && chars[start] == 'n' && chars[start + 1] == 'i' && chars[start + 2] == 'l') {
+      return null;
+    }
+
+    if (4 == end - start && chars[start] == 't' && chars[start + 1] == 'r' && chars[start + 2] == 'u' && chars[start + 3] == 'e') {
+      return Boolean.TRUE;
+    }
+
+    if (5 == end - start && chars[start] == 'f' && chars[start + 1] == 'a' && chars[start + 2] == 'l' && chars[start + 3] == 's' && chars[start + 4] == 'e') {
+      return Boolean.FALSE;
+    }
+
+    if (slashPos < 0) {
+      return Symbol.intern(null, new String(chars, start, end - start));
+    }
+
+    return Symbol.intern(new String(chars, start, slashPos - start), new String(chars, start + slashPos + 1, end - (start + slashPos + 1)));
+  }
+
+  final Object readKeyword() throws Exception {
+    boolean usedBuffer = false;
+    char[]  buffer     = reader.buffer();
+    int     startpos   = reader.position();
+    int     pos        = startpos;
+    int     len        = buffer.length;
+    int     slashPos   = -1;
+
+    outer:
+    while (buffer != null) {
+      for (; pos < len; ++pos) {
+        final char nextChar = buffer[pos];
+        if (slashPos == -1 && '/' == nextChar) {
+          slashPos = (usedBuffer ? charBuffer.length() : 0) + pos - startpos;
+        } else if (CharReader.isBoundary(nextChar)) {
+          reader.position(pos);
+          break outer;
+        }
+      }
+      char[] nextBuffer = reader.nextBuffer();
+      if (nextBuffer == null) {
+        break;
+      }
+      if (!usedBuffer) {
+        usedBuffer = true;
+        charBuffer.clear();
+      }
+      charBuffer.append(buffer, startpos, pos);
+      buffer   = nextBuffer;
+      startpos = reader.position();
+      pos      = startpos;
+      len      = buffer.length;
+    }
+
+    char[] chars;
+    int start, end;
+    if (usedBuffer) {
+      charBuffer.append(buffer, startpos, pos);
+      chars = charBuffer.buffer;
+      start = 0;
+      end = charBuffer.len;
+    } else {
+      chars = buffer;
+      start = startpos;
+      end = pos;
+    }
+    // return slashPos < 0
+    //   ? Keyword.intern(null, new String(chars, start, end - start))
+    //   : Keyword.intern(new String(chars, start, slashPos), new String(chars, start + slashPos + 1, end - (start + slashPos + 1)));
+    return keywordCache.put(chars, start, end, slashPos);
   }
 
   final Object readNumber() throws Exception {
@@ -321,75 +441,61 @@ public final class EDNReader {
       return null;
 
     final char val = reader.eatwhite();
-    if (CharReader.isNumberChar(val)) {
-      reader.unread();
-      return readNumber();
-    } else {
-      switch (val) {
-        case '"':
-          return readString();
-        case 't': {
-          final char[] data = tempRead(3);
-          if (data[0] == 'r' && data[1] == 'u' && data[2] == 'e')
-            return true;
-          throw new Exception("Parse error - bad boolean value.");
-        }
-        case 'f': {
-          final char[] data = tempRead(4);
-          if (data[0] == 'a' && data[1] == 'l' && data[2] == 's' && data[3] == 'e')
-            return false;
-          throw new Exception("Parse error - bad boolean value.");
-        }
-        case 'n': {
-          final char[] data = tempRead(2);
-          if (data[0] == 'i' && data[1] == 'l')
-            return null;
-          throw new Exception(
-              "Parse error - unrecognized 'null' entry - " + new String(data) + " - context:\n" + context());
-        }
-        case '{': {
-          return readMap();
-        }
-        case '[': {
-          return readVector();
-        }
-        case '(': {
-          return readList();
-        }
-        case '#': {
-          final int nextChar = reader.read();
-          if (nextChar == -1) {
-            throw Util.runtimeException("EOF while reading dispatch macro");
-          }
-          if (nextChar == '{') {
-            return readSet();
-          }
-          if (nextChar == '#') {
-            final char[] data = tempRead(3);
-            if (data[0] == 'I' && data[1] == 'n' && data[2] == 'f')
-              return Double.POSITIVE_INFINITY;
-            if (data[0] == '-' && data[1] == 'I' && data[2] == 'n' && reader.read() == 'f') {
-              return Double.NEGATIVE_INFINITY;
-            }
-            if (data[0] == 'N' && data[1] == 'a' && data[2] == 'N') {
-              return Double.NaN;
-            }
-            throw Util.runtimeException("Unknown symbolic value: ##" + new String(data));
-          }
-          throw Util.runtimeException("No dispatch macro for: #" + Character.toString(nextChar));
-        }
-        case 0:
-          if (reader.eof()) {
-            if (throwOnEOF) {
-              throw Util.runtimeException("EOF while reading");
-            } else {
-              return eofValue;
-            }
-          }
-          // fallthrough intentional
-        default:
-          throw new Exception("Parse error - Unexpected character - " + val);
+    switch (val) {
+      case '"':
+        return readString();
+      case ':':
+        return readKeyword();
+      case '{': {
+        return readMap();
       }
+      case '[': {
+        return readVector();
+      }
+      case '(': {
+        return readList();
+      }
+      case '#': {
+        final int nextChar = reader.read();
+        if (nextChar == -1) {
+          throw Util.runtimeException("EOF while reading dispatch macro");
+        }
+        if (nextChar == '{') {
+          return readSet();
+        }
+        if (nextChar == '#') {
+          final char[] data = tempRead(3);
+          if (data[0] == 'I' && data[1] == 'n' && data[2] == 'f')
+            return Double.POSITIVE_INFINITY;
+          if (data[0] == '-' && data[1] == 'I' && data[2] == 'n' && reader.read() == 'f') {
+            return Double.NEGATIVE_INFINITY;
+          }
+          if (data[0] == 'N' && data[1] == 'a' && data[2] == 'N') {
+            return Double.NaN;
+          }
+          throw Util.runtimeException("Unknown symbolic value: ##" + new String(data));
+        }
+        throw Util.runtimeException("No dispatch macro for: #" + Character.toString(nextChar));
+      }
+      case 0:
+        if (reader.eof()) {
+          if (throwOnEOF) {
+            throw Util.runtimeException("EOF while reading");
+          } else {
+            return eofValue;
+          }
+        }
+        // fallthrough intentional
+      default:
+        // TODO symbols starting with -/+
+        if (CharReader.isNumberChar(val)) {
+          reader.unread();
+          return readNumber();
+        } else if (!CharReader.isBoundary(val)) {
+          reader.unread();
+          return readSymbol();
+        }
+        throw new Exception("Parse error - Unexpected character - " + val);
     }
   }
 

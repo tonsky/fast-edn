@@ -29,7 +29,7 @@
   (bench-json))
 
 ; ┌────────────────┬─────────────┬─────────────┬─────────────┬─────────────┬─────────────┐
-; │                │          10 │         100 │          1K │         10K │        100K │
+; │ json           │          10 │         100 │          1K │         10K │        100K │
 ; │────────────────┼─────────────┼─────────────┼─────────────┼─────────────┼─────────────┤
 ; │ cheshire       │    0.548 μs │    0.985 μs │    4.288 μs │   38.888 μs │  386.009 μs │
 ; │ jsonista       │    0.135 μs │    0.669 μs │    3.109 μs │   35.575 μs │  332.501 μs │
@@ -65,7 +65,7 @@
   (bench-edn {:pattern #"edn_basic_\d+\.edn"}))
 
 ; ┌────────────────┬─────────────┬─────────────┬─────────────┬─────────────┬─────────────┐
-; │                │          10 │         100 │          1K │         10K │        100K │
+; │ edn_basic      │          10 │         100 │          1K │         10K │        100K │
 ; │────────────────┼─────────────┼─────────────┼─────────────┼─────────────┼─────────────┤
 ; │ clojure.edn    │    0.471 μs │    2.684 μs │   16.808 μs │  200.455 μs │ 1911.017 μs │
 ; │ tools.reader   │    0.414 μs │    3.351 μs │   28.355 μs │  433.135 μs │ 4109.846 μs │
@@ -94,11 +94,52 @@
 
 (comment
   (gen-ints 1400)
-  (bench-edn {:pattern #"ints_1400_\d+\.edn"}))
+  (bench-edn {:pattern #"ints_1400\.edn"}))
 
 ; ┌────────────────┬─────────────┐
-; │                │        1400 │
+; │ ints           │        1400 │
 ; │────────────────┼─────────────┤
 ; │ clojure.edn    │  426.189 μs │
 ; │ better-clojure │   45.737 μs │
 ; └────────────────┴─────────────┘
+
+(defn gen-keywords [cnt]
+  (let [kw-fn (fn [] (str/join (repeatedly (+ 1 (rand-int 10)) #(rand-nth "abcdefghijklmnopqrstuvwxyz!?*-+<>"))))
+        kws   (vec (repeatedly 30 kw-fn))]
+    (with-open [w (io/writer (str "dev/data/keywords_" cnt ".edn"))]
+      (.write w "[")
+      (dotimes [_ cnt]
+        (if (< (rand) 0.5)
+          (do
+            (.write w ":")
+            (.write w ^String (rand-nth kws))
+            (.write w " "))
+          (do
+            (.write w ":")
+            (.write w ^String (rand-nth kws))
+            (.write w "/")
+            (.write w ^String (rand-nth kws))
+            (.write w " "))))
+      (.write w "]"))))
+
+(comment
+  (gen-keywords 10)
+  (bench-edn {:pattern #"keywords_10\.edn"})
+  (bench-edn {:pattern #"keywords_100\.edn"})
+  (bench-edn {:pattern #"keywords_1000\.edn"})
+  (bench-edn {:pattern #"keywords_10000\.edn"})
+  (bench-edn {:pattern #"keywords_\d+\.edn"})
+  
+  (let [s (slurp "dev/data/keywords_10000.edn")]
+    (duti/bench
+      (edn2/read-string s))
+    (duti/profile-for 30000
+      (edn2/read-string s))))
+
+; ┌────────────────┬─────────────┬─────────────┬─────────────┬─────────────┐
+; │ keywords       │          10 │         100 │        1000 │       10000 │
+; │────────────────┼─────────────┼─────────────┼─────────────┼─────────────┤
+; │ clojure.edn    │             │             │  372.045 μs │             │
+; | no cache       |    0.570 µs |    5.227 µs |   59.297 µs |  764.711 µs |
+; │ better-clojure │    0.811 µs │    5.798 µs │   62.301 μs │  672.947 µs │
+; └────────────────┴─────────────┴─────────────┴─────────────┴─────────────┘

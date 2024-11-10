@@ -1,6 +1,7 @@
 package better_clojure.edn;
 
 import clojure.lang.Keyword;
+import java.util.Arrays;
 
 public class KeywordCache {
   final float loadFactor = 0.75f;
@@ -10,23 +11,23 @@ public class KeywordCache {
   int length;
 
   public static class LeafNode {
-    public final String k;
-    public final Keyword v;
+    public final char[] chars;
+    public final Keyword keyword;
     public final int hashcode;
     LeafNode nextNode;
-    public LeafNode(final String k, final Keyword v, final int hc, final LeafNode nn) {
-      this.k = k;
-      this.v = v;
+    public LeafNode(char[] chars, final Keyword keyword, final int hc, final LeafNode nn) {
+      this.chars = chars;
+      this.keyword = keyword;
       this.hashcode = hc;
       this.nextNode = nn;
     }
   };
 
   // Taken from openjdk ArraysSupport class
-  public static int hashCode(final char[] a, final int fromIndex, final int end) {
-    int result = 1;
-    for (int i = fromIndex; i < end; i++) {
-      result = 31 * result + a[i];
+  public static int hashCode(final char[] chars, final int start, final int end) {
+    int result = 0;
+    for (int i = start; i < end; i++) {
+      result = 31 * result + chars[i];
     }
     return result;
   }
@@ -94,32 +95,24 @@ public class KeywordCache {
     }
   }
 
-  boolean equals(final char[] data, final int sidx, final int len, final String v) {
-    if (v.length() != len)
-      return false;
-    for (int idx = 0; idx < len; ++idx) {
-      if (v.charAt(idx) != data[idx + sidx])
-        return false;
-    }
-    return true;
-  }
-
-  public Keyword put(final char[] data, final int sidx, final int eidx) {
-    final int len = eidx - sidx;
-    final int hc = hashCode(data, sidx, eidx);
+  public Keyword put(final char[] data, final int start, final int end, int slashPos) {
+    final int hc = hashCode(data, start, end);
     final int idx = hc & this.mask;
     final LeafNode lastNode = this.data[idx];
     // Avoid unneeded calls to both equals and checkResize
     for (LeafNode e = lastNode; e != null; e = e.nextNode) {
-      if (equals(data, sidx, len, e.k))
-        return e.v;
+      if (e.hashcode == hc && Arrays.equals(data, start, end, e.chars, 0, e.chars.length)) {
+        return e.keyword;
+      }
     }
-    final String s = new String(data, sidx, len);
-    final Keyword rv = Keyword.intern(s);
-    this.data[idx] = new LeafNode(s, rv, hc, lastNode);
+
+    String ns = slashPos == -1 ? null : new String(data, start, slashPos);
+    String name = slashPos == -1 ? new String(data, start, end - start) : new String(data, start + slashPos + 1, end - (start + slashPos + 1));
+    final Keyword keyword = Keyword.intern(ns, name);
+    this.data[idx] = new LeafNode(Arrays.copyOfRange(data, start, end), keyword, hc, lastNode);
     ++this.length;
     checkResize();
-    return rv;
+    return keyword;
   }
 
   public int size() {

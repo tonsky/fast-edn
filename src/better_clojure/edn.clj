@@ -110,13 +110,14 @@
 
 (comment
   (Double/parseDouble ".")
+  (name (read-string ":kw/ns"))
   (read-string "2r1111")
   (read-string "[11    ]")
   (read-string "123N")
   (read-string "[123 ]")
   (type 123N)
   (java.math.BigInteger. "-123")
-  (clojure.edn/read-string "0x")
+  (type (clojure.edn/read-string "-a"))
   (clojure.edn/read-string "2r1111")
   (clojure.edn/read-string "36rabcxyz")
   (type (clojure.edn/read-string "1m"))

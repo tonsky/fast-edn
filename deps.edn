@@ -4,7 +4,7 @@
  {:dev
   {:extra-paths ["dev" "test"]
    :extra-deps 
-   {io.github.tonsky/duti    {:git/sha "73c2c46c242810fa207d72bf8fcdbb4c1110c678"}
+   {io.github.tonsky/duti    {:git/sha "963dd200a45d8730a31a20a3cd1616341a1acccd"}
     com.cnuernber/charred    {:mvn/version "1.034"}
     metosin/jsonista         {:mvn/version "0.3.12"}
     cheshire/cheshire        {:mvn/version "5.13.0"}
@@ -15,7 +15,6 @@
               "-Duser.language=en"
               "-Duser.country=US"
               "-Dfile.encoding=UTF-8"
-              "-Dclj-async-profiler.output-dir=."
               "-Djdk.attach.allowAttachSelf"
               "-XX:+UnlockDiagnosticVMOptions"
               "-XX:+DebugNonSafepoints"

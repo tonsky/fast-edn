@@ -20,7 +20,7 @@
        (throw (ex-info "Compilation failed" {}))))))
 
 (defn reload []
-  (compile-all-java ["src/better_clojure"])
+  (compile-all-java ["src/better_clojure"] ["-Xlint:unchecked"] false)
   (duti/reload {:only :all}))
 
 (def -main
