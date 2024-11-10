@@ -27,7 +27,6 @@ public final class EDNReader {
   CharReader reader;
   public final boolean throwOnEOF;
   public final Object eofValue;
-  public final KeywordCache keywordCache = new KeywordCache();
   public final CharBuffer charBuffer = new CharBuffer();
 
   public EDNReader(boolean _throwOnEOF, Object _eofValue) {
@@ -213,10 +212,10 @@ public final class EDNReader {
       start = startpos;
       end = pos;
     }
-    // return slashPos < 0
-    //   ? Keyword.intern(null, new String(chars, start, end - start))
-    //   : Keyword.intern(new String(chars, start, slashPos), new String(chars, start + slashPos + 1, end - (start + slashPos + 1)));
-    return keywordCache.put(chars, start, end, slashPos);
+    
+    return slashPos < 0
+      ? Keyword.intern(null, new String(chars, start, end - start))
+      : Keyword.intern(new String(chars, start, slashPos), new String(chars, start + slashPos + 1, end - (start + slashPos + 1)));
   }
 
   final Object readNumber() throws Exception {
