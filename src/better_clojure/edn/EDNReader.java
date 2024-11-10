@@ -212,7 +212,7 @@ public final class EDNReader {
   final Object finalizeFloat(char[] chars, int start, int end) throws Exception {
     final int len = end - start;
     if (chars[end - 1] == 'M') {
-      return new BigDecimal(chars, start, len);
+      return new BigDecimal(chars, start, len - 1);
     } else {
       return Double.parseDouble(new String(chars, start, len));
     }
@@ -363,6 +363,18 @@ public final class EDNReader {
           }
           if (nextChar == '{') {
             return readSet();
+          }
+          if (nextChar == '#') {
+            final char[] data = tempRead(3);
+            if (data[0] == 'I' && data[1] == 'n' && data[2] == 'f')
+              return Double.POSITIVE_INFINITY;
+            if (data[0] == '-' && data[1] == 'I' && data[2] == 'n' && reader.read() == 'f') {
+              return Double.NEGATIVE_INFINITY;
+            }
+            if (data[0] == 'N' && data[1] == 'a' && data[2] == 'N') {
+              return Double.NaN;
+            }
+            throw Util.runtimeException("Unknown symbolic value: ##" + new String(data));
           }
           throw Util.runtimeException("No dispatch macro for: #" + Character.toString(nextChar));
         }
