@@ -66,6 +66,7 @@
     "sym123"        'sym123
     "/"             '/
     "ns/sym"        'ns/sym
+    "[a/b c/d]"     '[a/b c/d]
     "абв"           'абв
     
     ;; not in spec

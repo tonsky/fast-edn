@@ -3,6 +3,8 @@ package better_clojure.edn;
 import clojure.lang.ATransientMap;
 import clojure.lang.ATransientSet;
 import clojure.lang.BigInt;
+import clojure.lang.IFn;
+import clojure.lang.ILookup;
 import clojure.lang.IPersistentList;
 import clojure.lang.ITransientCollection;
 import clojure.lang.Keyword;
@@ -13,6 +15,7 @@ import clojure.lang.PersistentHashMap;
 import clojure.lang.PersistentHashSet;
 import clojure.lang.PersistentList;
 import clojure.lang.PersistentVector;
+import clojure.lang.RT;
 import clojure.lang.Symbol;
 import clojure.lang.Util;
 import java.io.EOFException;
@@ -20,6 +23,7 @@ import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.ListIterator;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 @SuppressWarnings("unchecked")
@@ -28,10 +32,14 @@ public final class EDNReader {
   public final boolean throwOnEOF;
   public final Object eofValue;
   public final CharBuffer charBuffer = new CharBuffer();
+  public final ILookup dataReaders;
+  public final IFn defaultDataReader;
 
-  public EDNReader(boolean _throwOnEOF, Object _eofValue) {
-    throwOnEOF = _throwOnEOF;
-    eofValue = _eofValue;
+  public EDNReader(ILookup dataReaders, IFn defaultDataReader, boolean throwOnEOF, Object eofValue) {
+    this.dataReaders = dataReaders;
+    this.defaultDataReader = defaultDataReader;
+    this.throwOnEOF = throwOnEOF;
+    this.eofValue = eofValue;
   }
 
   final char[] tempRead(int nchars) throws EOFException {
@@ -119,7 +127,7 @@ public final class EDNReader {
       for (; pos < len; ++pos) {
         final char nextChar = buffer[pos];
         if (slashPos == -1 && '/' == nextChar) {
-          slashPos = (usedBuffer ? charBuffer.length() : 0) + pos - startpos;
+          slashPos = (usedBuffer ? charBuffer.length() : 0) + pos;
         } else if (CharReader.isBoundary(nextChar)) {
           reader.position(pos);
           break outer;
@@ -153,6 +161,10 @@ public final class EDNReader {
       end = pos;
     }
 
+    if (1 == end - start && chars[start] == '/') {
+      return Symbol.intern(null, "/");
+    }
+
     if (3 == end - start && chars[start] == 'n' && chars[start + 1] == 'i' && chars[start + 2] == 'l') {
       return null;
     }
@@ -165,11 +177,20 @@ public final class EDNReader {
       return Boolean.FALSE;
     }
 
-    if (slashPos < 0) {
+    if (slashPos == -1) {
       return Symbol.intern(null, new String(chars, start, end - start));
     }
 
-    return Symbol.intern(new String(chars, start, slashPos - start), new String(chars, start + slashPos + 1, end - (start + slashPos + 1)));
+    if (slashPos == start) {
+      throw Util.runtimeException("Symbol namespace can't be empty: " + new String(chars, start, end - start));
+    }
+
+    if (slashPos == end - 1) {
+      throw Util.runtimeException("Symbol name can't be empty: " + new String(chars, start, end - start));
+    }
+
+    return Symbol.intern(new String(chars, start, slashPos - start), 
+                         new String(chars, slashPos + 1, end - (slashPos + 1)));
   }
 
   final Object readKeyword() throws Exception {
@@ -185,7 +206,7 @@ public final class EDNReader {
       for (; pos < len; ++pos) {
         final char nextChar = buffer[pos];
         if (slashPos == -1 && '/' == nextChar) {
-          slashPos = (usedBuffer ? charBuffer.length() : 0) + pos - startpos;
+          slashPos = (usedBuffer ? charBuffer.length() : 0) + pos;
         } else if (CharReader.isBoundary(nextChar)) {
           reader.position(pos);
           break outer;
@@ -219,9 +240,28 @@ public final class EDNReader {
       end = pos;
     }
 
-    return slashPos < 0
-      ? Keyword.intern(null, new String(chars, start, end - start))
-      : Keyword.intern(new String(chars, start, slashPos), new String(chars, start + slashPos + 1, end - (start + slashPos + 1)));
+    if (end <= start) {
+      throw Util.runtimeException("Keyword can't be empty: " + new String(chars, start, end - start));
+    }
+
+    if (1 == end - start && chars[start] == '/') {
+      return Keyword.intern(null, "/");
+    }
+
+    if (slashPos == -1) {
+      return Keyword.intern(null, new String(chars, start, end - start));
+    }
+
+    if (slashPos == start) {
+      throw Util.runtimeException("Keyword namespace can't be empty: " + new String(chars, start, end - start));
+    }
+
+    if (slashPos == end - 1) {
+      throw Util.runtimeException("Keyword name can't be empty: " + new String(chars, start, end - start));
+    }
+
+    return Keyword.intern(new String(chars, start, slashPos - start),
+                          new String(chars, slashPos + 1, end - (slashPos + 1)));
   }
 
   final Object readNumber() throws Exception {
@@ -504,6 +544,7 @@ public final class EDNReader {
           readObject(true);
           continue;
         }
+
         if (nextChar == '#') {
           final char[] data = tempRead(3);
           if (data[0] == 'I' && data[1] == 'n' && data[2] == 'f')
@@ -516,6 +557,20 @@ public final class EDNReader {
           }
           throw Util.runtimeException("Unknown symbolic value: ##" + new String(data));
         }
+
+        // Tagged Literals
+        reader.unread();
+        Object tag = readObject(true);
+        if (tag instanceof Symbol) {
+          Object value = readObject(true);
+          IFn dataReader = (IFn) RT.get(dataReaders, tag);
+          if (dataReader != null) {
+            return dataReader.invoke(value);
+          } else if (defaultDataReader != null) {
+            return defaultDataReader.invoke(tag, value);
+          }
+        }
+
         throw Util.runtimeException("No dispatch macro for: #" + Character.toString(nextChar));
       }
       case 0:

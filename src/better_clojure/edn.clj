@@ -5,8 +5,8 @@
   (:import
    [better_clojure.edn CharReader EDNReader]))
 
-(defn read
-  "Reads the next object from stream. stream defaults to the
+#_(defn read
+    "Reads the next object from stream. stream defaults to the
   current value of *in*.
 
   Reads data in the edn format (subset of Clojure data):
@@ -18,15 +18,15 @@
               When not supplied, only the default-data-readers will be used.
   :default - A function of two args, that will, if present and no reader is found for a tag,
              be called with the tag and the value."
-  ([]
-   (read *in*))
-  ([stream]
-   (read {} stream))
-  ([opts stream]
-   (edn/read stream opts)))
+    ([]
+     (read *in*))
+    ([stream]
+     (read {} stream))
+    ([opts stream]
+     (edn/read stream opts)))
 
 (defn reader ^EDNReader [opts]
-  (EDNReader. (not (contains? opts :eof)) (:eof opts)))
+  (EDNReader. (merge default-data-readers (:readers opts)) (:default opts) (not (contains? opts :eof)) (:eof opts)))
 
 (defn read-string
   "Reads one object from the string s. Returns nil when s is nil or empty.
@@ -109,8 +109,9 @@
 #_(clojure.test/test-ns *ns*)
 
 (comment
-  (Double/parseDouble ".")
-  (read-string "-0")
+  (read-string "#inst\"1985\"")
+  (read-string "[c/d]")
+  (read-string "#c/d 1")
   (Long/parseLong "FFFFFFFFFFFFFFFFFF" 16)
   
   (count (Long/toString Long/MAX_VALUE 16))

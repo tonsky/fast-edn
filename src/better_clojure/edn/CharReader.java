@@ -58,7 +58,7 @@ public final class CharReader {
   }
 
   public static boolean isBoundary(int ch) {
-    return isWhitespace(ch) || ch == ']' || ch == '}' || ch == ')' || ch == '[' || ch == '{' || ch == '(' || ch == '#';
+    return isWhitespace(ch) || ch == ']' || ch == '}' || ch == ')' || ch == '[' || ch == '{' || ch == '(' || ch == '#' || ch == '\\' || ch == '"' || ch == '\'';
   }
 
   public static boolean isNumberChar(int v) {
