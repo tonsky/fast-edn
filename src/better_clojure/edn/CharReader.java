@@ -50,7 +50,10 @@ public final class CharReader {
   }
 
   public static boolean isWhitespace(char ch) {
-    return ch == ',' || Character.isWhitespace(ch);
+    if (ch >= '\u0021' && ch <= '\u002B') return false;
+    if (ch >= '\u002D' && ch < '\u2000') return false;
+    if (ch == ' ' || ch == '\n' || ch == ',' || ch == '\t' || ch == '\r') return true;
+    return Character.isWhitespace(ch);
   }
 
   public static boolean isBoundary(char ch) {

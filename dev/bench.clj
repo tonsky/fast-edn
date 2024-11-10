@@ -47,10 +47,10 @@
 (comment
   (gen-edn-basic))
 
-(defn bench-edn [{prefix :prefix
-                  :or {prefix ".*"}}]
+(defn bench-edn [{pattern :pattern
+                  :or {pattern #".*\.edn"}}]
   (doseq [file (-> (io/file "dev/data")
-                 (.listFiles ^FileFilter #(boolean (re-matches (re-pattern (str prefix "_\\d+\\.edn")) (File/.getName %))))
+                 (.listFiles ^FileFilter #(boolean (re-matches pattern (File/.getName %))))
                  (->> (sort-by File/.getName)))
           :let [content (slurp file)]]
     (duti/benching (File/.getName file)
@@ -62,7 +62,7 @@
             (parse-fn content)))))))
 
 (comment
-  (bench-edn {:prefix "edn_basic"}))
+  (bench-edn {:pattern #"edn_basic_\d+\.edn"}))
 
 ; ┌────────────────┬─────────────┬─────────────┬─────────────┬─────────────┬─────────────┐
 ; │                │          10 │         100 │          1K │         10K │        100K │
@@ -73,7 +73,7 @@
 ; └────────────────┴─────────────┴─────────────┴─────────────┴─────────────┴─────────────┘
 
 (comment
-  (bench-edn {:prefix "edn_full"}))
+  (bench-edn {:pattern #"edn_basic_\d+\.edn"}))
 
 (defn rand-num ^String [max-len]
   (let [len (rand-nth (for [i (range 1 (inc max-len))
@@ -94,11 +94,11 @@
 
 (comment
   (gen-ints 1400)
-  (bench-edn {:prefix "ints"}))
+  (bench-edn {:pattern #"ints_1400_\d+\.edn"}))
 
 ; ┌────────────────┬─────────────┐
 ; │                │        1400 │
 ; │────────────────┼─────────────┤
 ; │ clojure.edn    │  426.189 μs │
-; │ better-clojure │   48.737 μs │
+; │ better-clojure │   45.737 μs │
 ; └────────────────┴─────────────┘
