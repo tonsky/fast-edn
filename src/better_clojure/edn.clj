@@ -111,7 +111,7 @@
 (comment
   (Double/parseDouble ".")
   (name (read-string ":kw/ns"))
-  (read-string "2r1111")
+  (read-string "{:a ; }\n :b}")
   (read-string "[11    ]")
   (read-string "123N")
   (read-string "[123 ]")

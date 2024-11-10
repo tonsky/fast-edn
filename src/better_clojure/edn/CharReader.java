@@ -1,5 +1,6 @@
 package better_clojure.edn;
 
+import java.util.function.IntPredicate;
 import java.util.function.Supplier;
 
 public final class CharReader {
@@ -49,31 +50,31 @@ public final class CharReader {
     return bufferLength() - curPos;
   }
 
-  public static boolean isWhitespace(char ch) {
+  public static boolean isWhitespace(int ch) {
     if (ch >= '\u0021' && ch <= '\u002B') return false;
     if (ch >= '\u002D' && ch < '\u2000') return false;
     if (ch == ' ' || ch == '\n' || ch == ',' || ch == '\t' || ch == '\r') return true;
     return Character.isWhitespace(ch);
   }
 
-  public static boolean isBoundary(char ch) {
+  public static boolean isBoundary(int ch) {
     return isWhitespace(ch) || ch == ']' || ch == '}' || ch == ')' || ch == '[' || ch == '{' || ch == '(' || ch == '#';
   }
 
-  public static boolean isNumberChar(char v) {
+  public static boolean isNumberChar(int v) {
     return (v >= '0' && v <= '9') || v == '-' || v == '+';
   }
 
-  public static boolean isDigit(char v) {
+  public static boolean isDigit(int v) {
     return v >= '0' && v <= '9';
   }
 
-  public final char eatwhite() {
+  public final char eat(IntPredicate pred) {
     char[] buffer = curBuffer;
     while (buffer != null) {
       final int len = buffer.length;
       int pos = curPos;
-      for (; pos < len && isWhitespace(buffer[pos]); ++pos);
+      for (; pos < len && pred.test(buffer[pos]); ++pos);
       if (pos < len) {
         final char retval = buffer[pos];
         position(pos + 1);
@@ -82,6 +83,10 @@ public final class CharReader {
       buffer = nextBuffer();
     }
     return 0;
+  }
+
+  public final char eatwhite() {
+    return eat(CharReader::isWhitespace);
   }
 
   public boolean eof() {

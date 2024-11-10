@@ -10,8 +10,7 @@
     cheshire/cheshire        {:mvn/version "5.13.0"}
     org.clojure/tools.reader {:mvn/version "1.5.0"}
     virgil/virgil            {:mvn/version "0.3.0"}}
-   :jvm-opts ["-ea"
-              "-Dclojure.main.report=stderr"
+   :jvm-opts ["-Dclojure.main.report=stderr"
               "-Duser.language=en"
               "-Duser.country=US"
               "-Dfile.encoding=UTF-8"

@@ -212,7 +212,7 @@ public final class EDNReader {
       start = startpos;
       end = pos;
     }
-    
+
     return slashPos < 0
       ? Keyword.intern(null, new String(chars, start, end - start))
       : Keyword.intern(new String(chars, start, slashPos), new String(chars, start + slashPos + 1, end - (start + slashPos + 1)));
@@ -436,11 +436,16 @@ public final class EDNReader {
   }
 
   public final Object readObject() throws Exception {
+    return readObject(throwOnEOF);
+  }
+
+  public final Object readObject(boolean throwOnEOF) throws Exception {
     if (reader == null)
       return null;
 
-    final char val = reader.eatwhite();
-    switch (val) {
+    while (true) {
+      char val = reader.eatwhite();
+      switch (val) {
       case '"':
         return readString();
       case ':':
@@ -454,6 +459,10 @@ public final class EDNReader {
       case '(': {
         return readList();
       }
+      case ';': {
+        reader.eat(ch -> '\n' != ch && '\r' != ch);
+        continue;
+      }
       case '#': {
         final int nextChar = reader.read();
         if (nextChar == -1) {
@@ -461,6 +470,10 @@ public final class EDNReader {
         }
         if (nextChar == '{') {
           return readSet();
+        }
+        if (nextChar == '_') {
+          readObject(true);
+          continue;
         }
         if (nextChar == '#') {
           final char[] data = tempRead(3);
@@ -495,6 +508,7 @@ public final class EDNReader {
           return readSymbol();
         }
         throw new Exception("Parse error - Unexpected character - " + val);
+      }
     }
   }
 
