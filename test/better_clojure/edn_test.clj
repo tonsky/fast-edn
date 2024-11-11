@@ -93,6 +93,9 @@
 (deftest keywords-test
   (are [s e] (= e (edn/read-string s))
     ":sym"           :sym
+    ":true"          :true
+    ":false"         :false
+    ":nil"           :nil
     ":.*+!-_?$%&=<>" :.*+!-_?$%&=<>
     ":-sym"          :-sym
     ":+sym"          :+sym
@@ -117,6 +120,9 @@
     ":+1a"           :+1a)
   
   (are [s] (thrown? Exception (edn/read-string s))
+    ":"
+    ": "
+    "[:]"
     ":ns/"
     ":/sym"
     "://"

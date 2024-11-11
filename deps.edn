@@ -9,7 +9,7 @@
     metosin/jsonista         {:mvn/version "0.3.12"}
     cheshire/cheshire        {:mvn/version "5.13.0"}
     org.clojure/tools.reader {:mvn/version "1.5.0"}
-    virgil/virgil            {:mvn/version "0.3.0"}}
+    virgil/virgil            {:mvn/version "0.3.1"}}
    :jvm-opts ["-Dclojure.main.report=stderr"
               "-Duser.language=en"
               "-Duser.country=US"

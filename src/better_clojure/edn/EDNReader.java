@@ -108,7 +108,7 @@ public final class EDNReader {
     throw new EOFException("Parse error - EOF while reading string: " + charBuffer.toString());
   }
 
-  final Object readSymbol(int firstChar) throws Exception {
+  final Object readSymbol(int firstChar, boolean forKeyword) throws Exception {
     boolean usedBuffer = false;
     char[]  buffer     = reader.buffer();
     int     startpos   = reader.position();
@@ -161,19 +161,23 @@ public final class EDNReader {
       end = pos;
     }
 
+    if (end == start) {
+      throw Util.runtimeException("Empty " + (forKeyword ? "keyword" : "symbol") + "? How peculiar!");
+    }
+
     if (1 == end - start && chars[start] == '/') {
       return Symbol.intern(null, "/");
     }
 
-    if (3 == end - start && chars[start] == 'n' && chars[start + 1] == 'i' && chars[start + 2] == 'l') {
+    if (!forKeyword && 3 == end - start && chars[start] == 'n' && chars[start + 1] == 'i' && chars[start + 2] == 'l') {
       return null;
     }
 
-    if (4 == end - start && chars[start] == 't' && chars[start + 1] == 'r' && chars[start + 2] == 'u' && chars[start + 3] == 'e') {
+    if (!forKeyword && 4 == end - start && chars[start] == 't' && chars[start + 1] == 'r' && chars[start + 2] == 'u' && chars[start + 3] == 'e') {
       return Boolean.TRUE;
     }
 
-    if (5 == end - start && chars[start] == 'f' && chars[start + 1] == 'a' && chars[start + 2] == 'l' && chars[start + 3] == 's' && chars[start + 4] == 'e') {
+    if (!forKeyword && 5 == end - start && chars[start] == 'f' && chars[start + 1] == 'a' && chars[start + 2] == 'l' && chars[start + 3] == 's' && chars[start + 4] == 'e') {
       return Boolean.FALSE;
     }
 
@@ -182,11 +186,11 @@ public final class EDNReader {
     }
 
     if (slashPos == start) {
-      throw Util.runtimeException("Symbol namespace can't be empty: " + new String(chars, start, end - start));
+      throw Util.runtimeException((forKeyword ? "Keyword" : "Symbol") + " namespace can't be empty: " + new String(chars, start, end - start));
     }
 
     if (slashPos == end - 1) {
-      throw Util.runtimeException("Symbol name can't be empty: " + new String(chars, start, end - start));
+      throw Util.runtimeException((forKeyword ? "Keyword" : "Symbol") + " name can't be empty: " + new String(chars, start, end - start));
     }
 
     return Symbol.intern(new String(chars, start, slashPos - start), 
@@ -194,74 +198,7 @@ public final class EDNReader {
   }
 
   final Object readKeyword() throws Exception {
-    boolean usedBuffer = false;
-    char[]  buffer     = reader.buffer();
-    int     startpos   = reader.position();
-    int     pos        = startpos;
-    int     len        = buffer.length;
-    int     slashPos   = -1;
-
-    outer:
-    while (buffer != null) {
-      for (; pos < len; ++pos) {
-        final char nextChar = buffer[pos];
-        if (slashPos == -1 && '/' == nextChar) {
-          slashPos = (usedBuffer ? charBuffer.length() : 0) + pos;
-        } else if (CharReader.isBoundary(nextChar)) {
-          reader.position(pos);
-          break outer;
-        }
-      }
-      char[] nextBuffer = reader.nextBuffer();
-      if (nextBuffer == null) {
-        break;
-      }
-      if (!usedBuffer) {
-        usedBuffer = true;
-        charBuffer.clear();
-      }
-      charBuffer.append(buffer, startpos, pos);
-      buffer   = nextBuffer;
-      startpos = reader.position();
-      pos      = startpos;
-      len      = buffer.length;
-    }
-
-    char[] chars;
-    int start, end;
-    if (usedBuffer) {
-      charBuffer.append(buffer, startpos, pos);
-      chars = charBuffer.buffer;
-      start = 0;
-      end = charBuffer.len;
-    } else {
-      chars = buffer;
-      start = startpos;
-      end = pos;
-    }
-
-    if (end <= start) {
-      throw Util.runtimeException("Keyword can't be empty: " + new String(chars, start, end - start));
-    }
-
-    if (1 == end - start && chars[start] == '/') {
-      return Keyword.intern(null, "/");
-    }
-
-    if (slashPos == -1) {
-      return Keyword.intern(null, new String(chars, start, end - start));
-    }
-
-    if (slashPos == start) {
-      throw Util.runtimeException("Keyword namespace can't be empty: " + new String(chars, start, end - start));
-    }
-
-    if (slashPos == end - 1) {
-      throw Util.runtimeException("Keyword name can't be empty: " + new String(chars, start, end - start));
-    }
-
-    return Keyword.intern(new String(chars, start, slashPos - start),
-                          new String(chars, slashPos + 1, end - (slashPos + 1)));
+    return Keyword.intern((Symbol) readSymbol(-1, true));
   }
 
   final Object readNumber() throws Exception {
@@ -516,7 +453,7 @@ public final class EDNReader {
           }
         } else {
           reader.unread();
-          return readSymbol('-');
+          return readSymbol('-', false);
         }
       }
       case '+': {
@@ -529,7 +466,7 @@ public final class EDNReader {
           return readNumber();
         } else {
           reader.unread();
-          return readSymbol('+');
+          return readSymbol('+', false);
         }
       }
       case '#': {
@@ -588,7 +525,7 @@ public final class EDNReader {
           return readNumber();
         } else if (!CharReader.isBoundary(val)) {
           reader.unread();
-          return readSymbol(-1);
+          return readSymbol(-1, false);
         }
         throw new Exception("Parse error - Unexpected character - " + val);
       }
