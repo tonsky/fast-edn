@@ -33,6 +33,11 @@
 (deftest chars-test
   (are [s e] (= e (edn/read-string s))
     "\\c"         \c
+    "\\n"         \n
+    "\\u"         \u
+    "\\o"         \o
+    "\\ "         \space
+    "\\]"         \]
     "\\newline"   \newline
     "\\return"    \return
     "\\space"     \space
@@ -51,10 +56,13 @@
     "\\o377"      \o377)
   
   (are [s] (thrown? Exception (edn/read-string s))
+    "\\u20"
+    "\\"
+    "\\new"
+    "\\wh"
     "\\uD800"
     "\\uDFFF"
     "\\0378"))
-
 
 (deftest symbols-test
   (are [s e] (= e (edn/read-string s))

@@ -108,6 +108,52 @@ public final class EDNReader {
     throw new EOFException("Parse error - EOF while reading string: " + charBuffer.toString());
   }
 
+  final Object readCharacter() throws Exception {
+    int ch = reader.read();
+    if (-1 == ch) {
+      throw Util.runtimeException("EOF while reading character");
+    }
+    int peek = reader.read();
+    reader.unread();
+    if (peek == -1 || CharReader.isBoundary(peek)) {
+      return (char) ch;
+    } else if ('u' == ch) {
+      final char[] temp = tempRead(4);
+      ch = Integer.parseInt(new WrappedCharSequence(temp), 0, 4, 16);
+      if (ch >= 0xD800 && ch <= 0xDFFF) { // surrogate code unit?
+        throw Util.runtimeException("Invalid character constant: \\u" + new String(temp));
+      }
+      return (char) ch;
+    } else if ('o' == ch) {
+      ch = 0;
+      while (true) {
+        peek = reader.read();
+        if (peek == -1 || peek < '0' || peek > '7') {
+          reader.unread();
+          break;
+        }
+        ch = ch * 8 + Character.digit(peek, 8);
+      }
+      if (ch > 0377) {
+        throw Util.runtimeException("Octal escape sequence must be in range [0, 377]" + context());
+      }
+      return (char) ch;
+    } else if ('n' == ch && "ewline".contentEquals(new WrappedCharSequence(tempRead(6)))) {
+      return '\n';
+    } else if ('r' == ch && "eturn".contentEquals(new WrappedCharSequence(tempRead(5)))) {
+      return '\r';
+    } else if ('s' == ch && "pace".contentEquals(new WrappedCharSequence(tempRead(4)))) {
+      return ' ';
+    } else if ('t' == ch && "ab".contentEquals(new WrappedCharSequence(tempRead(2)))) {
+      return '\t';
+    } else if ('b' == ch && "ackspace".contentEquals(new WrappedCharSequence(tempRead(8)))) {
+      return '\b';
+    } else if ('f' == ch && "ormfeed".contentEquals(new WrappedCharSequence(tempRead(7)))) {
+      return '\f';
+    }
+    throw Util.runtimeException("Error parsing character" + context());
+  }
+
   final Object readSymbol(int firstChar, boolean forKeyword) throws Exception {
     boolean usedBuffer = false;
     char[]  buffer     = reader.buffer();
@@ -455,6 +501,9 @@ public final class EDNReader {
           reader.unread();
           return readSymbol('-', false);
         }
+      }
+      case '\\': {
+        return readCharacter();
       }
       case '+': {
         val = reader.read();

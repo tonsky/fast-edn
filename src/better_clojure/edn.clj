@@ -109,6 +109,10 @@
 #_(clojure.test/test-ns *ns*)
 
 (comment
+  36r123XYZ
+  22/7
+  \u0020
+  
   (read-string "#inst\"1985\"")
   (read-string "[c/d]")
   (read-string "#c/d 1")
