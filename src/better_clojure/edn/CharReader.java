@@ -9,14 +9,47 @@ public final class CharReader {
   int curPos;
 
   public static class SingletonData implements Supplier<char[]> {
-    char[] data;
-    SingletonData(char[] _d) {
+    public char[] data;
+    public SingletonData(char[] _d) {
       data = _d;
     }
     public char[] get() {
       char[] retval = data;
       data = null;
       return retval;
+    }
+  }
+
+  public static class BufferSupplier implements Supplier<char[]> {
+    public static final int capacity = 8192;
+    public final String s;
+    public int pos = 0;
+    public final int len;
+    public char[] buf;
+
+    public BufferSupplier(String s) {
+      this.s = s;
+      this.len = s.length();
+    }
+
+    public char[] get() {
+      if (pos + capacity < len) {
+        if (buf == null) {
+          buf = new char[capacity];
+        }
+        s.getChars(pos, pos + capacity, buf, 0);
+        pos += capacity;
+        return buf;
+      }
+
+      if (pos == len) {
+        return null;
+      }
+
+      buf = new char[len - pos];
+      s.getChars(pos, len, buf, 0);
+      pos = len;
+      return buf;
     }
   }
 
@@ -30,7 +63,8 @@ public final class CharReader {
   }
 
   public CharReader(String data) {
-    this(data.toCharArray());
+    this(new BufferSupplier(data));
+    // this(new SingletonData(data.toCharArray()));
   }
 
   public final char[] buffer() {

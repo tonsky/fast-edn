@@ -112,7 +112,9 @@
   36r123XYZ
   22/7
   \u0020
-  
+  (meta (read-string "^:kw {}"))
+  (read-string (slurp "dev/data/keywords_1000.edn"))
+
   (read-string "#inst\"1985\"")
   (read-string "[c/d]")
   (read-string "#c/d 1")

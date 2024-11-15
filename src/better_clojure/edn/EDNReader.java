@@ -1,30 +1,10 @@
 package better_clojure.edn;
 
-import clojure.lang.ATransientMap;
-import clojure.lang.ATransientSet;
-import clojure.lang.BigInt;
-import clojure.lang.IFn;
-import clojure.lang.ILookup;
-import clojure.lang.IPersistentList;
-import clojure.lang.ITransientCollection;
-import clojure.lang.Keyword;
-import clojure.lang.LazilyPersistentVector;
-import clojure.lang.Numbers;
-import clojure.lang.PersistentArrayMap;
-import clojure.lang.PersistentHashMap;
-import clojure.lang.PersistentHashSet;
-import clojure.lang.PersistentList;
-import clojure.lang.PersistentVector;
-import clojure.lang.RT;
-import clojure.lang.Symbol;
-import clojure.lang.Util;
-import java.io.EOFException;
-import java.math.BigDecimal;
-import java.math.BigInteger;
-import java.util.ArrayList;
-import java.util.ListIterator;
-import java.util.Map;
-import java.util.stream.Collectors;
+import clojure.lang.*;
+import java.io.*;
+import java.math.*;
+import java.util.*;
+import java.util.stream.*;
 
 @SuppressWarnings("unchecked")
 public final class EDNReader {
@@ -34,6 +14,8 @@ public final class EDNReader {
   public final CharBuffer charBuffer = new CharBuffer();
   public final ILookup dataReaders;
   public final IFn defaultDataReader;
+  public final static Keyword TAG_KEY = Keyword.intern(null, "tag");
+  public final static Keyword PARAM_TAGS_KEY = Keyword.intern(null, "param-tags");
 
   public EDNReader(ILookup dataReaders, IFn defaultDataReader, boolean throwOnEOF, Object eofValue) {
     this.dataReaders = dataReaders;
@@ -173,7 +155,7 @@ public final class EDNReader {
       for (; pos < len; ++pos) {
         final char nextChar = buffer[pos];
         if (slashPos == -1 && '/' == nextChar) {
-          slashPos = (usedBuffer ? charBuffer.length() : 0) + pos;
+          slashPos = (usedBuffer ? charBuffer.length() : 0) + pos - startpos;
         } else if (CharReader.isBoundary(nextChar)) {
           reader.position(pos);
           break outer;
@@ -231,16 +213,16 @@ public final class EDNReader {
       return Symbol.intern(null, new String(chars, start, end - start));
     }
 
-    if (slashPos == start) {
+    if (slashPos == 0) {
       throw Util.runtimeException((forKeyword ? "Keyword" : "Symbol") + " namespace can't be empty: " + new String(chars, start, end - start));
     }
 
-    if (slashPos == end - 1) {
+    if (slashPos == end - start - 1) {
       throw Util.runtimeException((forKeyword ? "Keyword" : "Symbol") + " name can't be empty: " + new String(chars, start, end - start));
     }
 
-    return Symbol.intern(new String(chars, start, slashPos - start), 
-                         new String(chars, slashPos + 1, end - (slashPos + 1)));
+    return Symbol.intern(new String(chars, start, slashPos),
+                         new String(chars, start + slashPos + 1, end - (start + slashPos + 1)));
   }
 
   final Object readKeyword() throws Exception {
@@ -452,6 +434,32 @@ public final class EDNReader {
     throw Util.runtimeException("EOF while reading map: " + String.valueOf(acc.persistent()) + context());
   }
 
+  public final Object readMeta() throws Exception {
+    Object meta = readObject(true);
+    if (meta instanceof Symbol || meta instanceof String) {
+      meta = RT.map(TAG_KEY, meta);
+    } else if (meta instanceof IPersistentVector) {
+      meta = RT.map(PARAM_TAGS_KEY, meta);
+    } else if (meta instanceof Keyword) {
+      meta = RT.map(meta, RT.T);
+    } else if (!(meta instanceof IPersistentMap)) {
+      throw new IllegalArgumentException("Metadata must be Symbol, Keyword, String, Map or Vector");
+    }
+
+    Object value = readObject(true);
+    if (!(value instanceof IMeta)) {
+      throw new IllegalArgumentException("Can't put meta on " + (value == null ? "null" : value.getClass()) + ": " + value + context());
+    }
+    IPersistentMap ometa = (IPersistentMap) RT.meta(value);
+    meta = ((IKVReduce) meta).kvreduce(new AFn() {
+      @Override
+      public Object invoke(Object ometa, Object key, Object value) {
+        return RT.assoc(ometa, key, value);
+      }
+    }, ometa);
+    return ((IObj) value).withMeta((IPersistentMap) meta);
+  }
+
   public final Object readObject() throws Exception {
     return readObject(throwOnEOF);
   }
@@ -501,6 +509,9 @@ public final class EDNReader {
           reader.unread();
           return readSymbol('-', false);
         }
+      }
+      case '^': {
+        return readMeta();
       }
       case '\\': {
         return readCharacter();

@@ -94,20 +94,30 @@
     (.write w "]")))
 
 (comment
+  (meta ^[:a :b :c] {})
+  
   (gen-ints 1400)
   (bench-edn {:pattern #"ints_1400\.edn"})
   (let [s (slurp "dev/data/ints_1400.edn")]
     (duti/bench
       (edn2/read-string s))
     (duti/profile-for 30000
-      (edn2/read-string s))))
+      (edn2/read-string s)))
+
+  (Thread/sleep 10000))
 
 ; ┌────────────────┬─────────────┐
 ; │ ints           │        1400 │
-; │────────────────┼─────────────┤
+; ├────────────────┼─────────────┤
 ; │ clojure.edn    │  426.189 μs │
 ; │ better-clojure │   45.737 μs │
 ; └────────────────┴─────────────┘
+; ▁▂▃▄▅▆▇ █  ▏▎▍▌▋▊▉▐▕
+;  ▄▄▄▄  ┌─┬┬┐ ┏━┳┳┓
+; ▟ ▖▗ ▙ ├╴│╵│ ┣╸┃╹┃
+;▐ ▞  ▚ ▌├─┼─┤ ┣━╋━┫
+; ▜▝  ▘▛ │╷│╶┤ ┃╻┃╺┫
+;  ▀▀▀▀  └┴┴─┘ ┗┻┻━┛
 
 (defn gen-keywords [cnt]
   (let [kw-fn (fn [] (str/join (repeatedly (+ 1 (rand-int 10)) #(rand-nth "abcdefghijklmnopqrstuvwxyz!?*-+<>"))))
@@ -132,15 +142,21 @@
   (gen-keywords 10)
   (bench-edn {:pattern #"keywords_10\.edn"})
   (bench-edn {:pattern #"keywords_100\.edn"})
+  (edn2/read-string (slurp "dev/data/keywords_1000.edn"))
   (bench-edn {:pattern #"keywords_1000\.edn"})
   (bench-edn {:pattern #"keywords_10000\.edn"})
   (bench-edn {:pattern #"keywords_\d+\.edn"})
-  
-  (let [s (slurp "dev/data/keywords_10000.edn")]
+
+  (let [s (slurp "dev/data/keywords_1000.edn")]
     (duti/bench
-      (edn2/read-string s))
-    (duti/profile-for 30000
-      (edn2/read-string s))))
+      (edn/read-string s))) ;; 365 µs
+
+  (edn/read (better_clojure.edn.PushbackReader. (better_clojure.edn.StringReader. "123")))
+
+  (let [s (slurp "dev/data/keywords_1000.edn")]
+    (duti/bench
+      (edn/read (better_clojure.edn.PushbackReader. (better_clojure.edn.StringReader. s))))) ;; 365 µs
+  )
 
 ; ┌────────────────┬─────────────┬─────────────┬─────────────┬─────────────┐
 ; │ keywords       │          10 │         100 │        1000 │       10000 │
