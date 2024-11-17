@@ -116,9 +116,12 @@
   (read-string (slurp "dev/data/keywords_1000.edn"))
 
   (read-string "#inst\"1985\"")
-  (read-string "[c/d]")
+  (edn/read-string "1000000000000000000000000000000/2")
+  (read-string "1/2/3")
   (read-string "#c/d 1")
   (Long/parseLong "FFFFFFFFFFFFFFFFFF" 16)
+  
+  (symbol "ns" "1a")
   
   (count (Long/toString Long/MAX_VALUE 16))
   (count (Long/toString Long/MAX_VALUE 8))

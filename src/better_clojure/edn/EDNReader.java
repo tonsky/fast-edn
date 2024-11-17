@@ -229,10 +229,11 @@ public final class EDNReader {
     return Keyword.intern((Symbol) readSymbol(-1, true));
   }
 
-  final Object readNumber() throws Exception {
+  final Number readNumber() throws Exception {
     boolean usedBuffer = false;
     boolean isInt      = false;
     boolean isFloat    = false;
+    boolean isRatio    = false;
     char[]  buffer     = reader.buffer();
     int     startpos   = reader.position();
     int     pos        = startpos;
@@ -254,6 +255,10 @@ public final class EDNReader {
         } else if (radixPos == -1 && (nextChar == 'r' || nextChar == 'R')) {
           radixPos = (usedBuffer ? charBuffer.length() : 0) + pos - startpos;
           isInt = true;
+        } else if (nextChar == '/') {
+          reader.position(pos + 1);
+          isRatio = true;
+          break outer;
         }
       }
       char[] nextBuffer = reader.nextBuffer();
@@ -271,20 +276,41 @@ public final class EDNReader {
       len      = buffer.length;
     }
 
+    Number result;
+
     if (usedBuffer && isFloat) {
       charBuffer.append(buffer, startpos, pos);
-      return finalizeFloat(charBuffer.buffer, 0, charBuffer.len);
+      result = finalizeFloat(charBuffer.buffer, 0, charBuffer.len);
     } else if (usedBuffer) {
       charBuffer.append(buffer, startpos, pos);
-      return finalizeInt(charBuffer.buffer, 0, charBuffer.len, radixPos);
+      result = finalizeInt(charBuffer.buffer, 0, charBuffer.len, radixPos);
     } else if (isFloat) {
-      return finalizeFloat(buffer, startpos, pos);
+      result = finalizeFloat(buffer, startpos, pos);
     } else {
-      return finalizeInt(buffer, startpos, pos, radixPos);
+      result = finalizeInt(buffer, startpos, pos, radixPos);
     }
+
+    if (isRatio) {
+      result = result instanceof BigInt ? Numbers.reduceBigInt((BigInt) result) : result;
+      if (!(result instanceof Long || result instanceof BigInteger)) {
+        throw Util.runtimeException("Nominator in ratio can't be " + result.getClass().getName() + ": " + result + context());
+      }
+      BigInteger nominator = result instanceof Long ? BigInteger.valueOf((Long) result) : (BigInteger) result;
+      
+      result = readNumber();
+      result = result instanceof BigInt ? Numbers.reduceBigInt((BigInt) result) : result;
+      if (!(result instanceof Long || result instanceof BigInteger)) {
+        throw Util.runtimeException("Denominator in ratio can't be " + result.getClass().getName() + ": " + result + context());
+      }
+      BigInteger denominator = result instanceof Long ? BigInteger.valueOf((Long) result) : (BigInteger) result;
+
+      result = Numbers.divide(nominator, denominator);
+    }
+
+    return result;
   }
 
-  final Object finalizeInt(char[] chars, int start, int end, int radixPos) throws Exception {
+  final Number finalizeInt(char[] chars, int start, int end, int radixPos) throws Exception {
     int radix = 10;
     boolean forceBigInt = false;
 
@@ -327,7 +353,7 @@ public final class EDNReader {
     }
   }
 
-  final Object finalizeFloat(char[] chars, int start, int end) throws Exception {
+  final Number finalizeFloat(char[] chars, int start, int end) throws Exception {
     final int len = end - start;
     if (chars[end - 1] == 'M') {
       return new BigDecimal(chars, start, len - 1);

@@ -85,7 +85,11 @@
     "ns/.1a"        'ns/.1a
     "ns//"          'ns//
     "ns/sym/sym"    'ns/sym/sym
-    "ns//sym"       'ns//sym)
+    "ns//sym"       'ns//sym
+    
+    ;; extras -- don't work in clojure.edn
+    "ns/1a"         (symbol "ns" "1a")
+    "ns/sym/"       (symbol "ns" "sym/"))
   
   (are [s] (thrown? Exception (edn/read-string s))
     "ns/"
@@ -93,9 +97,7 @@
     "//"
     "1a"    
     "-1a"
-    "+1a"
-    "ns/1a"
-    "ns/sym/"))
+    "+1a"))
     
 
 (deftest keywords-test
@@ -115,7 +117,6 @@
     ;; not in spec
     ":.1a"           :.1a
     ":/"             :/
-    ":///"           :///
     ":ns//"          :ns//
     ":ns///"         :ns///
     ":ns/sym/sym"    :ns/sym/sym
@@ -125,7 +126,11 @@
     ":ns/.1a"        :ns/.1a
     ":1a"            :1a
     ":-1a"           :-1a
-    ":+1a"           :+1a)
+    ":+1a"           :+1a
+    
+    ;; extras -- don't work in clojure.edn
+    ":ns/sym/"       (keyword "ns" "sym/")
+    ":ns/1a"         (keyword "ns" "1a"))
   
   (are [s] (thrown? Exception (edn/read-string s))
     ":"
@@ -134,8 +139,9 @@
     ":ns/"
     ":/sym"
     "://"
-    ":ns/1a"
-    ":ns/sym/"))
+    
+    ;; extras -- don't work in clojure.edn
+    ":///"))
 
 
 (deftest integers-test
@@ -191,14 +197,17 @@
     "36rabcxyz" 36rabcxyz
     "36Rabcxyz" 36rabcxyz
     "36rABCXYZ" 36rABCXYZ
-    "36RABCXYZ" 36RABCXYZ)
+    "36RABCXYZ" 36RABCXYZ
+    
+    ;; extras -- don't work in clojure.edn
+    "2r1111N"   (clojure.lang.BigInt/fromLong 2r1111))
   
   (are [s] (thrown? Exception (edn/read-string s))
     "08"
     "0x"
     "0xG"
     "1n"
-    "2r1111N"))
+    ))
 
 (deftest floats-test
   (are [s e] (= e (edn/read-string s))
@@ -420,8 +429,14 @@
 ;; not in spec
 (deftest ratio-test
   (are [s e] (= e (edn/read-string {:eof :eof} s))
-    "1/2" 1/2
-    "0/1" 0/1)
+    "1/2"       1/2
+    "0/1"       0/1
+    
+    ;; extras -- don't work in clojure.edn
+    "0xFF/0x02"   255/2
+    "100N/50N"    2
+    "2r1000/0177" 8/127
+    "1000000000000000000000000000000/2" 1000000000000000000000000000000/2)
   
   (are [s] (thrown? Exception (edn/read-string s))
     "1/"
@@ -441,7 +456,7 @@
     "^:k ^:w {}"  {:k true :w true} {}
     "^tag {}"     {:tag 'tag} {}
     "^{:k :v} {}" {:k :v} {}
-    "^:kw\n,,,{}" {:kw true} {})
-  
-  (are [s] (thrown? Exception (edn/read-string s))
-    "^[tag] {}"))
+    "^:kw\n,,,{}" {:kw true} {}
+    
+    ;; extras -- don't work in clojure.edn
+    "^[tag] {}"   {:param-tags ['tag]} {}))

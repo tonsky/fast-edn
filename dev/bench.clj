@@ -102,9 +102,7 @@
     (duti/bench
       (edn2/read-string s))
     (duti/profile-for 30000
-      (edn2/read-string s)))
-
-  (Thread/sleep 10000))
+      (edn2/read-string s))))
 
 ; ┌────────────────┬─────────────┐
 ; │ ints           │        1400 │
@@ -112,12 +110,6 @@
 ; │ clojure.edn    │  426.189 μs │
 ; │ better-clojure │   45.737 μs │
 ; └────────────────┴─────────────┘
-; ▁▂▃▄▅▆▇ █  ▏▎▍▌▋▊▉▐▕
-;  ▄▄▄▄  ┌─┬┬┐ ┏━┳┳┓
-; ▟ ▖▗ ▙ ├╴│╵│ ┣╸┃╹┃
-;▐ ▞  ▚ ▌├─┼─┤ ┣━╋━┫
-; ▜▝  ▘▛ │╷│╶┤ ┃╻┃╺┫
-;  ▀▀▀▀  └┴┴─┘ ┗┻┻━┛
 
 (defn gen-keywords [cnt]
   (let [kw-fn (fn [] (str/join (repeatedly (+ 1 (rand-int 10)) #(rand-nth "abcdefghijklmnopqrstuvwxyz!?*-+<>"))))
@@ -146,7 +138,20 @@
   (bench-edn {:pattern #"keywords_1000\.edn"})
   (bench-edn {:pattern #"keywords_10000\.edn"})
   (bench-edn {:pattern #"keywords_\d+\.edn"})
-
+  
+  (duti/bench
+  (let [m (array-map :a 1 :b 2 :c 3 :d 4)]
+    (m :c)))
+  
+  (duti/bench
+  (let [m (hash-map :a 1 :b 2 :c 3 :d 4)]
+    (m :c)))
+  
+  (duti/bench
+  (let [m (doto (java.util.HashMap.)
+            (.putAll {:a 1 :b 2 :c 3 :d 4}))]
+    (.get m :c)))
+  
   (let [s (slurp "dev/data/keywords_1000.edn")]
     (duti/bench
       (edn/read-string s))) ;; 365 µs
