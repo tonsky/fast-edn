@@ -116,7 +116,7 @@
   (read-string (slurp "dev/data/keywords_1000.edn"))
 
   (read-string "#inst\"1985\"")
-  (edn/read-string "1000000000000000000000000000000/2")
+  (edn/read-string "#:ns  \n{:a 1}")
   (read-string "1/2/3")
   (read-string "#c/d 1")
   (Long/parseLong "FFFFFFFFFFFFFFFFFF" 16)

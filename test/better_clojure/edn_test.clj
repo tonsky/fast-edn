@@ -307,9 +307,12 @@
 ;; not in spec
 (deftest namespace-maps-test
   (are [s e] (= e (edn/read-string s))
-    "#:a{:b 1 :c/d 2 :_/e 3 \"f\" 4 g 5 h/i 6 _/j 7 8 9}" {:a/b 1, :c/d 2, :e 3, "f" 4, 'a/g 5, 'h/i 6, 'j 7, 8 9})
+    "#:a{:b 1 :c/d 2 :_/e 3 \"f\" 4 g 5 h/i 6 _/j 7 8 9}" {:a/b 1, :c/d 2, :e 3, "f" 4, 'a/g 5, 'h/i 6, 'j 7, 8 9}
+    "#:ns {:a 1}" {:ns/a 1}
+    "#:ns,, ,\n, ,, {:a 1}" {:ns/a 1})
   
   (are [s] (thrown? Exception (edn/read-string s))
+    "#:ns/name{:a 1}"
     "#abc{:def 1}"
     "#:{:def 1}"
     "#:abc{:def}"))

@@ -420,18 +420,17 @@ public final class EDNReader {
         reader.unread();
         Object key = readObject();
         acc = (ATransientSet) acc.conj(key);
-        int newCount = acc.count();
-        if (count + 1 != newCount) {
+        if (++count != acc.count()) {
           throw new IllegalArgumentException("Duplicate key: " + key + " reading set: " + String.valueOf(acc.persistent()) + context());
         }
-        count = newCount;
       }
     }
     throw Util.runtimeException("EOF while reading set: " + String.valueOf(acc.persistent()) + context());
   }
 
-  public final Object readMap() throws Exception {
+  public final Object readMap(String ns) throws Exception {
     ATransientMap acc = (ATransientMap) PersistentArrayMap.EMPTY.asTransient();
+    int count = 0;
     while (!reader.eof()) {
       char nextChar = reader.eatwhite();
       if (nextChar == '}') {
@@ -440,21 +439,34 @@ public final class EDNReader {
         break;
       } else {
         reader.unread();
-        // read key
         Object key = readObject();
-        if (acc.containsKey(key)) {
-          throw new IllegalArgumentException("Duplicate key: " + key + " reading map: " + String.valueOf(acc.persistent()) + context());
+        if (ns != null) {
+          if (key instanceof Keyword) {
+            Keyword kw = (Keyword) key;
+            if (kw.getNamespace() == null) {
+              key = Keyword.intern(ns, kw.getName());
+            } else if (kw.getNamespace().equals("_")) {
+              key = Keyword.intern(null, kw.getName());
+            }
+          } else if(key instanceof Symbol) {
+            Symbol s = (Symbol) key;
+            if (s.getNamespace() == null) {
+              key = Symbol.intern(ns, s.getName());
+            } else if (s.getNamespace().equals("_")) {
+              key = Symbol.intern(null, s.getName());
+            }
+          }
         }
-
         nextChar = reader.eatwhite();
         if (nextChar == '}') {
           throw Util.runtimeException("Map literal must contain an even number of forms: " + String.valueOf(acc.persistent()) + context());
         }
         reader.unread();
-
-        // read value
         Object val = readObject();
         acc = (ATransientMap) acc.assoc(key, val);
+        if (++count != acc.count()) {
+          throw new IllegalArgumentException("Duplicate key: " + key + " reading map: " + String.valueOf(acc.persistent()) + context());
+        }
       }
     }
     throw Util.runtimeException("EOF while reading map: " + String.valueOf(acc.persistent()) + context());
@@ -502,7 +514,7 @@ public final class EDNReader {
       case ':':
         return readKeyword();
       case '{': {
-        return readMap();
+        return readMap(null);
       }
       case '[': {
         return readVector();
@@ -579,6 +591,18 @@ public final class EDNReader {
             return Double.NaN;
           }
           throw Util.runtimeException("Unknown symbolic value: ##" + new String(data));
+        }
+
+        if (nextChar == ':') {
+          Symbol ns = (Symbol) readSymbol(-1, true);
+          if (ns.getNamespace() != null) {
+            throw Util.runtimeException("Namespaced map should use non-namespaced keyword: :" + ns + context());
+          }
+          val = reader.eatwhite();
+          if (val != '{') {
+            throw Util.runtimeException("Namespaced map must specify a map: " + context());
+          }
+          return readMap(ns.getName());
         }
 
         // Tagged Literals
