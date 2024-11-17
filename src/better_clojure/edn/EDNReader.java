@@ -46,37 +46,60 @@ public final class EDNReader {
           return rv;
         } else if (curChar == '\\') {
           charBuffer.append(buffer, startpos, pos);
-          final int idata = reader.readFrom(pos + 1);
+          int idata = reader.readFrom(pos + 1);
           if (idata == -1)
             throw new EOFException();
-          final char data = (char) idata;
-          switch (data) {
-            case '"':
-            case '\\':
-            case '/':
-              charBuffer.append(data);
-              break;
-            case 'b':
-              charBuffer.append('\b');
-              break;
-            case 'f':
-              charBuffer.append('\f');
-              break;
-            case 'r':
-              charBuffer.append('\r');
-              break;
-            case 'n':
-              charBuffer.append('\n');
-              break;
-            case 't':
-              charBuffer.append('\t');
-              break;
-            case 'u':
-              final char[] temp = tempRead(4);
-              charBuffer.append((char) (Integer.parseInt(new String(temp, 0, 4), 16)));
-              break;
-            default:
-              throw new Exception("Parse error - Unrecognized escape character: " + data);
+          if (idata >= '0' && idata <= '7') {
+            int acc = Character.digit(idata, 8);
+            idata = reader.read();
+            if (idata == -1) {
+              throw new EOFException("EOF while reading string: " + charBuffer.toString());
+            } else if (idata >= '0' && idata <= '7') {
+              acc = acc * 8 + Character.digit(idata, 8);
+              idata = reader.read();
+              if (idata == -1) {
+                throw new EOFException("EOF while reading string: " + charBuffer.toString());
+              } else if (idata >= '0' && idata <= '7') {
+                acc = acc * 8 + Character.digit(idata, 8);
+              } else {
+                reader.unread();
+              }
+            } else {
+              reader.unread();
+            }
+            if(acc > 0377)
+              throw Util.runtimeException("Octal escape sequence must be in range [0, 377]" + context());
+            charBuffer.append((char) acc);
+          } else {
+            final char data = (char) idata;
+            switch (data) {
+              case '"':
+              case '\\':
+              case '/':
+                charBuffer.append(data);
+                break;
+              case 'b':
+                charBuffer.append('\b');
+                break;
+              case 'f':
+                charBuffer.append('\f');
+                break;
+              case 'r':
+                charBuffer.append('\r');
+                break;
+              case 'n':
+                charBuffer.append('\n');
+                break;
+              case 't':
+                charBuffer.append('\t');
+                break;
+              case 'u':
+                final char[] temp = tempRead(4);
+                charBuffer.append((char) (Integer.parseInt(new String(temp, 0, 4), 16)));
+                break;
+              default:
+                throw new Exception("Parse error - Unrecognized escape character: " + data);
+            }
           }
           buffer = reader.buffer();
           startpos = reader.position();
@@ -152,6 +175,10 @@ public final class EDNReader {
 
     outer:
     while (buffer != null) {
+      startpos = reader.position();
+      pos      = startpos;
+      len      = buffer.length;
+
       for (; pos < len; ++pos) {
         final char nextChar = buffer[pos];
         if (slashPos == -1 && '/' == nextChar) {
@@ -161,25 +188,22 @@ public final class EDNReader {
           break outer;
         }
       }
-      char[] nextBuffer = reader.nextBuffer();
-      if (nextBuffer == null) {
-        break;
-      }
+      
       if (!usedBuffer) {
         usedBuffer = true;
         charBuffer.clear();
       }
+      
       charBuffer.append(buffer, startpos, pos);
-      buffer   = nextBuffer;
-      startpos = reader.position();
-      pos      = startpos;
-      len      = buffer.length;
+      buffer = reader.nextBuffer();
     }
 
     char[] chars;
     int start, end;
     if (usedBuffer) {
-      charBuffer.append(buffer, startpos, pos);
+      if (buffer != null && pos > startpos) {
+        charBuffer.append(buffer, startpos, pos);
+      }
       chars = charBuffer.buffer;
       start = 0;
       end = charBuffer.len;
@@ -241,6 +265,10 @@ public final class EDNReader {
     int     radixPos   = -1;
     outer:
     while (buffer != null) {
+      startpos = reader.position();
+      pos      = startpos;
+      len      = buffer.length;
+
       for (; pos < len; ++pos) {
         final char nextChar = buffer[pos];
         if (CharReader.isDigit(nextChar)) {
@@ -261,33 +289,36 @@ public final class EDNReader {
           break outer;
         }
       }
-      char[] nextBuffer = reader.nextBuffer();
-      if (nextBuffer == null) {
-        break;
-      }
+
       if (!usedBuffer) {
         usedBuffer = true;
         charBuffer.clear();
       }
+
       charBuffer.append(buffer, startpos, pos);
-      buffer   = nextBuffer;
-      startpos = reader.position();
-      pos      = startpos;
-      len      = buffer.length;
+      buffer = reader.nextBuffer();
+    }
+
+    char[] chars;
+    int start, end;
+    if (usedBuffer) {
+      if (buffer != null && pos > startpos) {
+        charBuffer.append(buffer, startpos, pos);
+      }
+      chars = charBuffer.buffer;
+      start = 0;
+      end = charBuffer.len;
+    } else {
+      chars = buffer;
+      start = startpos;
+      end = pos;
     }
 
     Number result;
-
-    if (usedBuffer && isFloat) {
-      charBuffer.append(buffer, startpos, pos);
-      result = finalizeFloat(charBuffer.buffer, 0, charBuffer.len);
-    } else if (usedBuffer) {
-      charBuffer.append(buffer, startpos, pos);
-      result = finalizeInt(charBuffer.buffer, 0, charBuffer.len, radixPos);
-    } else if (isFloat) {
-      result = finalizeFloat(buffer, startpos, pos);
+    if (isFloat) {
+      result = finalizeFloat(chars, start, end);
     } else {
-      result = finalizeInt(buffer, startpos, pos, radixPos);
+      result = finalizeInt(chars, start, end, radixPos);
     }
 
     if (isRatio) {
@@ -295,7 +326,7 @@ public final class EDNReader {
       if (!(result instanceof Long || result instanceof BigInteger)) {
         throw Util.runtimeException("Nominator in ratio can't be " + result.getClass().getName() + ": " + result + context());
       }
-      BigInteger nominator = result instanceof Long ? BigInteger.valueOf((Long) result) : (BigInteger) result;
+      BigInteger numerator = result instanceof Long ? BigInteger.valueOf((Long) result) : (BigInteger) result;
       
       result = readNumber();
       result = result instanceof BigInt ? Numbers.reduceBigInt((BigInt) result) : result;
@@ -304,7 +335,7 @@ public final class EDNReader {
       }
       BigInteger denominator = result instanceof Long ? BigInteger.valueOf((Long) result) : (BigInteger) result;
 
-      result = Numbers.divide(nominator, denominator);
+      result = Numbers.divide(numerator, denominator);
     }
 
     return result;
@@ -542,6 +573,12 @@ public final class EDNReader {
             return BigInt.fromBigInteger(((BigInt) res).toBigInteger().negate());
           } else if (res instanceof BigDecimal) {
             return ((BigDecimal) res).negate();
+          } else if (res instanceof Ratio) {
+            BigInteger numerator = ((Ratio) res).numerator;
+            BigInteger denominator = ((Ratio) res).denominator;
+            return new Ratio(numerator.negate(), denominator);
+          } else {
+            throw Util.runtimeException("Unexpected number type " + res.getClass().getName() + ": " + res + context());
           }
         } else {
           reader.unread();

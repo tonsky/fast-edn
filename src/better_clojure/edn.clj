@@ -114,9 +114,10 @@
   \u0020
   (meta (read-string "^:kw {}"))
   (read-string (slurp "dev/data/keywords_1000.edn"))
-
+  (.-numerator (read-string "1/-2"))
+  (Character/digit \8 8)
   (read-string "#inst\"1985\"")
-  (edn/read-string "#:ns  \n{:a 1}")
+  (edn/read-string "\"\\090\"")
   (read-string "1/2/3")
   (read-string "#c/d 1")
   (Long/parseLong "FFFFFFFFFFFFFFFFFF" 16)

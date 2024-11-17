@@ -33,7 +33,7 @@ public final class CharReader {
     }
 
     public char[] get() {
-      if (pos + capacity < len) {
+      if (pos + capacity <= len) {
         if (buf == null) {
           buf = new char[capacity];
         }

@@ -17,7 +17,11 @@
     "\", ; \\n #\"" ", ; \n #"
     
     ;; not in spec
-    "\" \\b \\f \\ua66e \\uA66E \\0 \\12 \\176 \\377 \"" " \b \f \ua66e \uA66E \0 \12 \176 \377 ")
+    "\" \\b \\f \\ua66e \\uA66E \\0 \\12 \\176 \\377 \\1222 \\newline \"" " \b \f \ua66e \uA66E \0 \12 \176 \377 R2 \newline "
+    
+    ;; extras -- don't work in clojure.edn
+    "\"\\18\"" (str \o1 \8)
+    )
 
   (are [s] (thrown? Exception (edn/read-string s))
     "\"\\\""
@@ -27,7 +31,9 @@
     "\"\\u1\""
     "\"\\u12\""
     "\"\\u123\""
-    "\"\\378\""))
+    "\"\\400\""
+    "\"\\80\""
+    "\"\\1"))
 
 
 (deftest chars-test
@@ -66,6 +72,8 @@
 
 (deftest symbols-test
   (are [s e] (= e (edn/read-string s))
+    "-"             '-
+    "+"             '+
     "sym"           'sym
     ".*+!-_?$%&=<>" '.*+!-_?$%&=<>
     "-sym"          '-sym
@@ -434,12 +442,15 @@
   (are [s e] (= e (edn/read-string {:eof :eof} s))
     "1/2"       1/2
     "0/1"       0/1
+    "-1/2"      -1/2
     
     ;; extras -- don't work in clojure.edn
     "0xFF/0x02"   255/2
     "100N/50N"    2
     "2r1000/0177" 8/127
-    "1000000000000000000000000000000/2" 1000000000000000000000000000000/2)
+    "1000000000000000000000000000000/2" 1000000000000000000000000000000/2
+    "1/-2"        -1/2
+    "-1/-2"       1/2)
   
   (are [s] (thrown? Exception (edn/read-string s))
     "1/"
