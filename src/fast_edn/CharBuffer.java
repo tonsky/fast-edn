@@ -1,4 +1,4 @@
-package better_clojure.edn;
+package fast_edn;
 
 public final class CharBuffer {
   char[] buffer;

@@ -11,10 +11,10 @@
 ; Author: Stuart Halloway
 
 
-(ns better-clojure.edn-gen-test
+(ns fast-edn.gen-test
   (:require
-   [better-clojure.generators :as cgen]
-   [better-clojure.edn :as edn]
+   [fast-edn.generators :as cgen]
+   [fast-edn.core :as edn]
    [clojure.test :refer [deftest is are testing]]
    [clojure.test.generative :refer [defspec]]
    [clojure.test.generative.runner :as runner]))
@@ -49,13 +49,13 @@
   10000)
 
 (deftest roundtrip-test
-  (runner/run cpus time-ms #'better-clojure.edn-gen-test/types-that-should-roundtrip))
+  (runner/run cpus time-ms #'fast-edn.gen-test/types-that-should-roundtrip))
 
 (deftest no-roundtrip-test
-  (runner/run cpus time-ms #'better-clojure.edn-gen-test/types-that-should-not-roundtrip))
+  (runner/run cpus time-ms #'fast-edn.gen-test/types-that-should-not-roundtrip))
 
 (comment
   (try
-    (runner/run 10 10000 #'better-clojure.edn-gen-test/types-that-should-roundtrip)
+    (runner/run 10 10000 #'fast-edn.gen-test/types-that-should-roundtrip)
     (catch clojure.lang.ExceptionInfo e
       (:input (ex-data e)))))

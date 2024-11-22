@@ -1,11 +1,11 @@
-# Better versions of some clojure.core functions
+# Fast EDN parser
 
 ## Using
 
 Add this to deps.edn:
 
 ```
-io.github.tonsky/better-clojure {:mvn/version "0.1.0"}
+io.github.tonsky/fast-edn {:mvn/version "0.1.0"}
 ```
 
 ## License

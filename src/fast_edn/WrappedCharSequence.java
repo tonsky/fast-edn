@@ -1,4 +1,4 @@
-package better_clojure.edn;
+package fast_edn;
 
 public class WrappedCharSequence implements CharSequence {
     public final char[] array;

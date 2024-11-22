@@ -6,17 +6,17 @@
 (duti/set-dirs "src" "dev" "test")
 
 (defn reload []
-  (virgil/compile-java ["src/better_clojure"])
+  (virgil/compile-java ["src/fast_edn"])
   (duti/reload {:only :all}))
 
 (def -main
   duti/-main)
 
 (defn test-all []
-  (virgil/compile-java ["src/better_clojure"])
+  (virgil/compile-java ["src/fast_edn"])
   (duti/reload {:only :all})
-  (duti/test #"better-clojure\..*-test"))
+  (duti/test #"fast-edn\.(.*-)?test"))
 
 (defn -test-main [_]
-  (virgil/compile-java ["src/better_clojure"])
-  (duti/test-exit #"better-clojure\..*-test"))
+  (virgil/compile-java ["src/fast_edn"])
+  (duti/test-exit #"fast-edn\.(.*-)?test"))

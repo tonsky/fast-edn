@@ -1,9 +1,7 @@
-(ns better-clojure.edn
+(ns fast-edn.core
   (:refer-clojure :exclude [read read-string])
-  (:require
-   [clojure.edn :as edn])
   (:import
-   [better_clojure.edn CharReader EDNReader]))
+   [fast_edn CharReader EDNReader]))
 
 #_(defn read
     "Reads the next object from stream. stream defaults to the

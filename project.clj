@@ -1,7 +1,7 @@
-(defproject io.github.tonsky/better-clojure "0.0.0"
+(defproject io.github.tonsky/fast-edn "0.0.0"
   :description "<description>"
-  :license     {:name "MIT" :url "https://github.com/tonsky/better-clojure/blob/master/LICENSE"}
-  :url         "https://github.com/tonsky/better-clojure"
+  :license     {:name "MIT" :url "https://github.com/tonsky/fast-edn/blob/master/LICENSE"}
+  :url         "https://github.com/tonsky/fast-edn"
   :dependencies
   [[org.clojure/clojure "1.12.0"]]
   :deploy-repositories

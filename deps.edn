@@ -4,7 +4,8 @@
  {:dev
   {:extra-paths ["dev" "test"]
    :extra-deps 
-   {io.github.tonsky/duti       {:git/sha "963dd200a45d8730a31a20a3cd1616341a1acccd"}
+   {io.github.tonsky/duti       {:git/sha "693074474eea1e67c02260e35c0c7e5a51c5db39"
+                                 #_#_:local/root "/ws/duti"}
     com.cnuernber/charred       {:mvn/version "1.034"}
     metosin/jsonista            {:mvn/version "0.3.12"}
     cheshire/cheshire           {:mvn/version "5.13.0"}

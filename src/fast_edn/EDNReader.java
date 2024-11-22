@@ -1,4 +1,4 @@
-package better_clojure.edn;
+package fast_edn;
 
 import clojure.lang.*;
 import java.io.*;

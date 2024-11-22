@@ -1,6 +1,6 @@
 (ns bench
   (:require
-   [better-clojure.edn :as edn2]
+   [fast-edn.core :as edn2]
    [charred.api :as charred]
    [cheshire.core :as cheshire]
    [clojure.edn :as edn]
@@ -56,25 +56,21 @@
     (duti/benching (File/.getName file)
       (doseq [[name parse-fn] [#_["clojure.edn" edn/read-string]
                                #_["tools.reader" tools/read-string]
-                               ["better-clojure" edn2/read-string]]]
+                               ["fast-edn" edn2/read-string]]]
         (duti/benching name
           (duti/bench
             (parse-fn content)))))))
 
 (comment
-  (bench-edn {:pattern #"edn_basic_\d+\.edn"})
-  (bench-edn {:pattern #"edn_basic_10000\.edn"}))
+  (bench-edn {:pattern #"edn_basic_\d+\.edn"}))
 
 ; ┌────────────────┬─────────────┬─────────────┬─────────────┬─────────────┬─────────────┐
 ; │ edn_basic      │          10 │         100 │          1K │         10K │        100K │
 ; ├────────────────┼─────────────┼─────────────┼─────────────┼─────────────┼─────────────┤
 ; │ clojure.edn    │    0.471 μs │    2.684 μs │   16.808 μs │  200.455 μs │ 1911.017 μs │
 ; │ tools.reader   │    0.414 μs │    3.351 μs │   28.355 μs │  433.135 μs │ 4109.846 μs │
-; │ better-clojure │    0.248 µs │    0.574 µs │    3.199 µs │   38.378 µs │  379.906 µs │
+; │ fast-edn       │    0.222 µs │    0.598 µs │    3.578 µs │   42.295 µs │  404.197 µs │
 ; └────────────────┴─────────────┴─────────────┴─────────────┴─────────────┴─────────────┘
-
-(comment
-  (bench-edn {:pattern #"edn_basic_\d+\.edn"}))
 
 (defn rand-num ^String [max-len]
   (let [len (rand-nth (for [i (range 1 (inc max-len))
@@ -94,21 +90,14 @@
     (.write w "]")))
 
 (comment
-  (meta ^[:a :b :c] {})
-  
   (gen-ints 1400)
-  (bench-edn {:pattern #"ints_1400\.edn"})
-  (let [s (slurp "dev/data/ints_1400.edn")]
-    (duti/bench
-      (edn2/read-string s))
-    (duti/profile-for 30000
-      (edn2/read-string s))))
+  (bench-edn {:pattern #"ints_1400\.edn"}))
 
 ; ┌────────────────┬─────────────┐
 ; │ ints           │        1400 │
 ; ├────────────────┼─────────────┤
 ; │ clojure.edn    │  426.189 μs │
-; │ better-clojure │   45.737 μs │
+; │ fast-edn       │   62.529 μs │
 ; └────────────────┴─────────────┘
 
 (defn gen-keywords [cnt]
@@ -131,42 +120,13 @@
       (.write w "]"))))
 
 (comment
-  (gen-keywords 10)
-  (bench-edn {:pattern #"keywords_10\.edn"})
-  (bench-edn {:pattern #"keywords_100\.edn"})
-  (edn2/read-string (slurp "dev/data/keywords_1000.edn"))
-  (bench-edn {:pattern #"keywords_1000\.edn"})
-  (bench-edn {:pattern #"keywords_10000\.edn"})
-  (bench-edn {:pattern #"keywords_\d+\.edn"})
-  
-  (duti/bench
-  (let [m (array-map :a 1 :b 2 :c 3 :d 4)]
-    (m :c)))
-  
-  (duti/bench
-  (let [m (hash-map :a 1 :b 2 :c 3 :d 4)]
-    (m :c)))
-  
-  (duti/bench
-  (let [m (doto (java.util.HashMap.)
-            (.putAll {:a 1 :b 2 :c 3 :d 4}))]
-    (.get m :c)))
-  
-  (let [s (slurp "dev/data/keywords_1000.edn")]
-    (duti/bench
-      (edn/read-string s))) ;; 365 µs
-
-  (edn/read (better_clojure.edn.PushbackReader. (better_clojure.edn.StringReader. "123")))
-
-  (let [s (slurp "dev/data/keywords_1000.edn")]
-    (duti/bench
-      (edn/read (better_clojure.edn.PushbackReader. (better_clojure.edn.StringReader. s))))) ;; 365 µs
-  )
+  (doseq [n (range 10 100 1000 10000)]
+    (gen-keywords 10))
+  (bench-edn {:pattern #"keywords_\d+\.edn"}))
 
 ; ┌────────────────┬─────────────┬─────────────┬─────────────┬─────────────┐
 ; │ keywords       │          10 │         100 │        1000 │       10000 │
 ; │────────────────┼─────────────┼─────────────┼─────────────┼─────────────┤
 ; │ clojure.edn    │             │             │  372.045 μs │             │
-; | no cache       |    0.570 µs |    5.227 µs |   59.297 µs |  764.711 µs |
-; │ better-clojure │    0.811 µs │    5.798 µs │   62.301 μs │  672.947 µs │
+; │ fast-edn       │    0.638 µs │    5.733 µs │   65.429 μs │  802.938 µs │
 ; └────────────────┴─────────────┴─────────────┴─────────────┴─────────────┘

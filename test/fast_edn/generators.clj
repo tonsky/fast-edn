@@ -1,6 +1,6 @@
 ;; copied from clojure/test/clojure/test_clojure/generators.clj
 
-(ns better-clojure.generators
+(ns fast-edn.generators
   (:require [clojure.data.generators :as gen])
   (:refer-clojure :exclude [namespace]))
 

@@ -1,4 +1,4 @@
-package better_clojure.edn;
+package fast_edn;
 
 import java.util.function.IntPredicate;
 import java.util.function.Supplier;

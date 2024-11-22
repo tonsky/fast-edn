@@ -1,6 +1,6 @@
-(ns better-clojure.edn-test
+(ns fast-edn.test
   (:require
-   [better-clojure.edn :as edn]
+   [fast-edn.core :as edn]
    [clojure.test :refer [is are deftest testing]]))
 
 (deftest tokens-test
