@@ -94,8 +94,19 @@ public final class EDNReader {
                 charBuffer.append('\t');
                 break;
               case 'u':
-                final char[] temp = tempRead(4);
-                charBuffer.append((char) (Integer.parseInt(new String(temp, 0, 4), 16)));
+                pos = reader.position();
+                buffer = reader.buffer();
+                if (pos + 4 < buffer.length) {
+                  int ch = (Character.digit(buffer[pos    ], 16) << 12)
+                         + (Character.digit(buffer[pos + 1], 16) << 8)
+                         + (Character.digit(buffer[pos + 2], 16) << 4)
+                         + Character.digit(buffer[pos + 3], 16);
+                  charBuffer.append((char) ch);
+                  reader.position(pos + 4);
+                } else {
+                  final char[] temp = tempRead(4);
+                  charBuffer.append((char) (Integer.parseInt(new String(temp, 0, 4), 16)));
+                }
                 break;
               default:
                 throw new Exception("Parse error - Unrecognized escape character: " + data);
@@ -124,7 +135,7 @@ public final class EDNReader {
       return (char) ch;
     } else if ('u' == ch) {
       final char[] temp = tempRead(4);
-      ch = Integer.parseInt(new WrappedCharSequence(temp), 0, 4, 16);
+      ch = Integer.parseInt(new CharSeq(temp), 0, 4, 16);
       if (ch >= 0xD800 && ch <= 0xDFFF) { // surrogate code unit?
         throw Util.runtimeException("Invalid character constant: \\u" + new String(temp));
       }
@@ -143,17 +154,17 @@ public final class EDNReader {
         throw Util.runtimeException("Octal escape sequence must be in range [0, 377]" + context());
       }
       return (char) ch;
-    } else if ('n' == ch && "ewline".contentEquals(new WrappedCharSequence(tempRead(6)))) {
+    } else if ('n' == ch && "ewline".contentEquals(new CharSeq(tempRead(6)))) {
       return '\n';
-    } else if ('r' == ch && "eturn".contentEquals(new WrappedCharSequence(tempRead(5)))) {
+    } else if ('r' == ch && "eturn".contentEquals(new CharSeq(tempRead(5)))) {
       return '\r';
-    } else if ('s' == ch && "pace".contentEquals(new WrappedCharSequence(tempRead(4)))) {
+    } else if ('s' == ch && "pace".contentEquals(new CharSeq(tempRead(4)))) {
       return ' ';
-    } else if ('t' == ch && "ab".contentEquals(new WrappedCharSequence(tempRead(2)))) {
+    } else if ('t' == ch && "ab".contentEquals(new CharSeq(tempRead(2)))) {
       return '\t';
-    } else if ('b' == ch && "ackspace".contentEquals(new WrappedCharSequence(tempRead(8)))) {
+    } else if ('b' == ch && "ackspace".contentEquals(new CharSeq(tempRead(8)))) {
       return '\b';
-    } else if ('f' == ch && "ormfeed".contentEquals(new WrappedCharSequence(tempRead(7)))) {
+    } else if ('f' == ch && "ormfeed".contentEquals(new CharSeq(tempRead(7)))) {
       return '\f';
     }
     throw Util.runtimeException("Error parsing character" + context());
@@ -268,11 +279,10 @@ public final class EDNReader {
       startpos = reader.position();
       pos      = startpos;
       len      = buffer.length;
-
       for (; pos < len; ++pos) {
         final char nextChar = buffer[pos];
-        if (CharReader.isDigit(nextChar)) {
-          continue;
+        if (nextChar >= '0' && nextChar <= '9') {
+          // pass
         } else if (CharReader.isBoundary(nextChar)) {
           reader.position(pos);
           break outer;
@@ -346,7 +356,7 @@ public final class EDNReader {
     boolean forceBigInt = false;
 
     if (radixPos >= 0) {
-      radix = (int) Long.parseLong(new WrappedCharSequence(chars), start, start + radixPos, 10);
+      radix = (int) Long.parseLong(new CharSeq(chars), start, start + radixPos, 10);
       start = start + radixPos + 1;
     }
 
@@ -376,7 +386,7 @@ public final class EDNReader {
     }
 
     try {
-      return Long.valueOf(Long.parseLong(new WrappedCharSequence(chars), start, end, radix));
+      return Long.valueOf(Long.parseLong(new CharSeq(chars), start, end, radix));
     } catch (Exception e) {
       final String str = new String(chars, start, end - start);
       BigInteger bn = new BigInteger(str, radix);
@@ -393,7 +403,7 @@ public final class EDNReader {
     }
   }
 
-  public final String context() throws Exception {
+  public final String context() {
     String context = reader.context(200);
     if (context != null) {
       return ", context:\n" + context;

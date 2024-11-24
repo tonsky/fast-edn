@@ -1,6 +1,7 @@
 (ns fast-edn.test
   (:require
    [fast-edn.core :as edn]
+   [clojure.string :as str]
    [clojure.test :refer [is are deftest testing]]))
 
 (deftest tokens-test
@@ -34,6 +35,18 @@
     "\"\\400\""
     "\"\\80\""
     "\"\\1"))
+
+
+(deftest string-buf-test
+  (doseq [i (range 0 10)
+          :let [prefix (str/join (repeat i "."))]]
+    (testing (str "prefix \"" prefix "\"")
+      (are [s e] (= (str prefix e)
+                   (let [s' (str "\"" prefix s "\"")]
+                     (edn/read-string {:buffer 10} s')))
+        "str" "str"
+        "\\n" "\n"
+        "\\u0040" "@"))))
 
 
 (deftest chars-test

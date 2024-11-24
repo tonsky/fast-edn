@@ -48,21 +48,25 @@
   (gen-edn-basic))
 
 (defn bench-edn [{pattern :pattern
-                  :or {pattern #".*\.edn"}}]
+                  profile :profile
+                  :or {pattern #".*\.edn"
+                       profile :quick}}]
   (doseq [file (-> (io/file "dev/data")
                  (.listFiles ^FileFilter #(boolean (re-matches pattern (File/.getName %))))
                  (->> (sort-by File/.getName)))
           :let [content (slurp file)]]
     (duti/benching (File/.getName file)
-      (doseq [[name parse-fn] [#_["clojure.edn" edn/read-string]
+      (doseq [[name parse-fn] [["clojure.edn" edn/read-string]
                                #_["tools.reader" tools/read-string]
                                ["fast-edn" edn2/read-string]]]
         (duti/benching name
-          (duti/bench
-            (parse-fn content)))))))
+          (case profile
+            :quick (duti/bench (parse-fn content))
+            :long  (duti/long-bench (parse-fn content))))))))
 
 (comment
-  (bench-edn {:pattern #"edn_basic_\d+\.edn"}))
+  (bench-edn {:pattern #"edn_basic_\d+\.edn"})
+  (bench-edn {:pattern #"edn_basic_10000\.edn"})) ;; 41.7 μs / 41.643379 μs
 
 ; ┌────────────────┬─────────────┬─────────────┬─────────────┬─────────────┬─────────────┐
 ; │ edn_basic      │          10 │         100 │          1K │         10K │        100K │
@@ -99,6 +103,62 @@
 ; │ clojure.edn    │  426.189 μs │
 ; │ fast-edn       │   62.529 μs │
 ; └────────────────┴─────────────┘
+
+
+(defn gen-strings [cnt]
+  (with-open [w (io/writer (str "dev/data/strings_" cnt ".edn"))]
+    (.write w "[")
+    (dotimes [_ cnt]
+      (let [s (str/join (repeatedly (+ 5 (rand-int 95)) #(rand-nth "abcdefghijklmnopqrstuvwxyz!?*-+<>,.: /")))]
+        (.write w "\"")
+        (.write w s)
+        (.write w "\" ")))
+    (.write w "]")))
+
+(defn gen-uni-strings [cnt]
+  (with-open [w (io/writer (str "dev/data/strings_uni_" cnt ".edn"))]
+    (.write w "[")
+    (dotimes [_ cnt]
+      (.write w "\"")
+      (dotimes [_ (+ 5 (rand-int 95))]
+        (let [ch ^Character (rand-nth "абвгдеёжзиклмнопрстуфхцчщщъыьэюя!?*-+<>,.: /\n\\\"")]
+          (.write w 
+            (cond
+              (= \\ ch)        "\\\\"
+              (= \" ch)        "\\\""
+              (= \newline ch)  "\\n"
+              (< (int ch) 128) (str ch)
+              :else            (format "\\u%04x" (int ch))))))
+      (.write w "\" "))
+    (.write w "]")))
+
+(comment
+  (gen-strings 1000)
+  (let [s (slurp "dev/data/strings_1000.edn")]
+    (duti.core/bench
+      (clojure.edn/read-string s)))
+  (let [s (slurp "dev/data/strings_1000.edn")]
+    (duti.core/bench
+      (fast-edn.core/read-string s)))
+
+  (gen-uni-strings 250)
+  (let [s (slurp "dev/data/strings_uni_250.edn")]
+    (duti.core/bench
+      (clojure.edn/read-string s)))
+  (let [s (slurp "dev/data/strings_uni_250.edn")]
+    (duti.core/bench
+      (fast-edn.core/read-string s)))
+  
+  (bench-edn {:profile :long
+              :pattern #"strings_.*"})
+  )
+
+; ┌────────────────┬─────────────┬─────────────┐
+; │ strings        │        1000 │     uni_250 │
+; ├────────────────┼─────────────┼─────────────┤
+; │ clojure.edn    │  670.574 μs │  668.553 μs │
+; │ fast-edn       │   47.531 μs │   131.72 μs │
+; └────────────────┴─────────────┴─────────────┘
 
 (defn gen-keywords [cnt]
   (let [kw-fn (fn [] (str/join (repeatedly (+ 1 (rand-int 10)) #(rand-nth "abcdefghijklmnopqrstuvwxyz!?*-+<>"))))

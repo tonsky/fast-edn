@@ -38,7 +38,7 @@
   ([opts ^String s]
    (when s
      (let [rdr (reader opts)]
-       (.beginParse rdr (CharReader. s))
+       (.beginParse rdr (CharReader. s (:buffer opts 1024)))
        (.readObject rdr)))))
 
 (require

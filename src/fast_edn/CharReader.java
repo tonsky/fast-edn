@@ -21,15 +21,20 @@ public final class CharReader {
   }
 
   public static class BufferSupplier implements Supplier<char[]> {
-    public static final int capacity = 8192;
+    public final int capacity;
     public final String s;
     public int pos = 0;
     public final int len;
     public char[] buf;
 
-    public BufferSupplier(String s) {
+    public BufferSupplier(String s, int capacity) {
       this.s = s;
       this.len = s.length();
+      this.capacity = capacity;
+    }
+
+    public BufferSupplier(String s) {
+      this(s, 8192);
     }
 
     public char[] get() {
@@ -62,9 +67,13 @@ public final class CharReader {
     this(new SingletonData(data));
   }
 
-  public CharReader(String data) {
-    this(new BufferSupplier(data));
+  public CharReader(String data, int capacity) {
+    this(new BufferSupplier(data, capacity));
     // this(new SingletonData(data.toCharArray()));
+  }
+
+  public CharReader(String data) {
+    this(data, 1024);
   }
 
   public final char[] buffer() {
@@ -196,7 +205,7 @@ public final class CharReader {
   }
 
   // Reads anything possible around the area.
-  public final String context(int nChars) throws Exception {
+  public final String context(int nChars) {
     final char[] buf = buffer();
     if (buf != null) {
       final int pos = position();

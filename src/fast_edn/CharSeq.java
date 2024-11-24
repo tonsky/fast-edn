@@ -1,17 +1,17 @@
 package fast_edn;
 
-public class WrappedCharSequence implements CharSequence {
+public class CharSeq implements CharSequence {
     public final char[] array;
     public final int start;
     public final int end;
 
-    public WrappedCharSequence(char[] array) {
+    public CharSeq(char[] array) {
         this.array = array;
         this.start = 0;
         this.end = array.length;
     }
 
-    public WrappedCharSequence(char[] array, int start, int end) {
+    public CharSeq(char[] array, int start, int end) {
         this.array = array;
         this.start = start;
         this.end = end;
