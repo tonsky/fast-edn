@@ -309,21 +309,41 @@ public final class EDNReader {
     return Keyword.intern((Symbol) readSymbol(-1, true));
   }
 
-  final Number readNumber() throws Exception {
-    boolean usedBuffer = false;
-    boolean isInt      = false;
-    boolean isFloat    = false;
-    boolean isRatio    = false;
-    char[]  buffer     = reader.buffer();
-    int     startpos   = reader.position();
-    int     pos        = startpos;
-    int     len        = buffer.length;
-    int     radixPos   = -1;
+  final Number readNumberSimple() throws Exception {
+    char[] buffer   = reader.buffer();
+    int    startpos = reader.position();
+    int    pos      = startpos;
+    int    len      = buffer.length;
+    long   value    = 0;
+
+    for (; pos < len; ++pos) {
+      final char nextChar = buffer[pos];
+      if (nextChar >= '0' && nextChar <= '9') {
+        value = value * 10 + nextChar - '0';
+      } else if (CharReader.isBoundary(nextChar)) {
+        reader.position(pos);
+        // return Long.parseLong(new CharSeq(buffer), startpos, pos, 10);
+        return value;
+      } else {
+        return readNumberComplex(buffer, startpos, pos);
+      }
+    }
+    return readNumberComplex(buffer, startpos, pos);
+  }
+
+  final Number readNumberComplex(char[] buffer, int startpos, int pos) throws Exception {
+    charBuffer.clear();
+    charBuffer.append(buffer, startpos, pos);
+    startpos = pos;
+
+    boolean isInt    = false;
+    boolean isFloat  = false;
+    boolean isRatio  = false;
+    int     len      = buffer.length;
+    int     radixPos = -1;
     outer:
     while (buffer != null) {
-      startpos = reader.position();
-      pos      = startpos;
-      len      = buffer.length;
+      len = buffer.length;
       for (; pos < len; ++pos) {
         final char nextChar = buffer[pos];
         if (nextChar >= '0' && nextChar <= '9') {
@@ -336,7 +356,7 @@ public final class EDNReader {
         } else if (!isInt && !isFloat && (nextChar == 'x' || nextChar == 'X' || nextChar == 'N')) {
           isInt = true;
         } else if (radixPos == -1 && (nextChar == 'r' || nextChar == 'R')) {
-          radixPos = (usedBuffer ? charBuffer.length() : 0) + pos - startpos;
+          radixPos = charBuffer.length() + pos - startpos;
           isInt = true;
         } else if (nextChar == '/') {
           reader.position(pos + 1);
@@ -345,35 +365,19 @@ public final class EDNReader {
         }
       }
 
-      if (!usedBuffer) {
-        usedBuffer = true;
-        charBuffer.clear();
-      }
-
       charBuffer.append(buffer, startpos, pos);
       buffer = reader.nextBuffer();
+      startpos = 0;
+      pos = 0;
     }
 
-    char[] chars;
-    int start, end;
-    if (usedBuffer) {
-      if (buffer != null && pos > startpos) {
-        charBuffer.append(buffer, startpos, pos);
-      }
-      chars = charBuffer.buffer;
-      start = 0;
-      end = charBuffer.len;
-    } else {
-      chars = buffer;
-      start = startpos;
-      end = pos;
-    }
+    charBuffer.append(buffer, startpos, pos);
 
     Number result;
     if (isFloat) {
-      result = finalizeFloat(chars, start, end);
+      result = finalizeFloat(charBuffer.buffer, 0, charBuffer.len);
     } else {
-      result = finalizeInt(chars, start, end, radixPos);
+      result = finalizeInt(charBuffer.buffer, 0, charBuffer.len, radixPos);
     }
 
     if (isRatio) {
@@ -383,7 +387,7 @@ public final class EDNReader {
       }
       BigInteger numerator = result instanceof Long ? BigInteger.valueOf((Long) result) : (BigInteger) result;
       
-      result = readNumber();
+      result = readNumberSimple();
       result = result instanceof BigInt ? Numbers.reduceBigInt((BigInt) result) : result;
       if (!(result instanceof Long || result instanceof BigInteger)) {
         throw Util.runtimeException("Denominator in ratio can't be " + result.getClass().getName() + ": " + result + context());
@@ -399,7 +403,7 @@ public final class EDNReader {
   final Number finalizeInt(char[] chars, int start, int end, int radixPos) throws Exception {
     int radix = 10;
     boolean forceBigInt = false;
-
+    
     if (radixPos >= 0) {
       radix = (int) Long.parseLong(new CharSeq(chars), start, start + radixPos, 10);
       start = start + radixPos + 1;
@@ -619,7 +623,7 @@ public final class EDNReader {
         }
         if (CharReader.isDigit(val)) {
           reader.unread();
-          Object res = readNumber();
+          Object res = readNumberSimple();
           if (res instanceof Long) {
             return Long.valueOf(-((Long) res).longValue());
           } else if (res instanceof Double) {
@@ -653,7 +657,7 @@ public final class EDNReader {
         }
         if (CharReader.isDigit(val)) {
           reader.unread();
-          return readNumber();
+          return readNumberSimple();
         } else {
           reader.unread();
           return readSymbol('+', false);
@@ -724,7 +728,7 @@ public final class EDNReader {
       default:
         if (CharReader.isNumberChar(val)) {
           reader.unread();
-          return readNumber();
+          return readNumberSimple();
         } else if (!CharReader.isBoundary(val)) {
           reader.unread();
           return readSymbol(-1, false);

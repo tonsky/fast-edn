@@ -93,8 +93,12 @@
       (.write w " "))
     (.write w "]")))
 
+(def ints-1400
+  (slurp "dev/data/ints_1400.edn"))
+
 (comment
   (gen-ints 1400)
+  (duti.core/bench (fast-edn.core/read-string ints-1400))
   (bench-edn {:pattern #"ints_1400\.edn"}))
 
 ; ┌────────────────┬─────────────┐
