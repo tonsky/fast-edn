@@ -131,6 +131,12 @@
       (.write w "\" "))
     (.write w "]")))
 
+(def strings-1000
+  (slurp "dev/data/strings_1000.edn"))
+
+(def strings-250
+  (slurp "dev/data/strings_uni_250.edn"))
+
 (comment
   (gen-strings 1000)
   (let [s (slurp "dev/data/strings_1000.edn")]
@@ -146,14 +152,13 @@
     (duti.core/bench (fast-edn.core/read-string s1000))
     (duti.core/profile-times 100000 (fast-edn.core/read-string s1000)))
 
-  (def s1000 (slurp "dev/data/strings_1000.edn"))
-  (def s250  (slurp "dev/data/strings_uni_250_safe.edn"))
 
   (do
-    (duti.core/bench (fast-edn.core/read-string s1000))
-    (duti.core/bench (fast-edn.core/read-string s250))
-    (duti.core/bench (fast-edn.core/read-string s1000)))
+    (duti.core/bench (fast-edn.core/read-string strings-1000))
+    (duti.core/bench (fast-edn.core/read-string strings-250))
+    (duti.core/bench (fast-edn.core/read-string strings-1000)))
 
+  (duti.core/long-bench (fast-edn.core/read-string strings-250))
   (duti.core/long-bench (fast-edn.core/read-string s1000))
 
   (fast-edn.core/read-string (slurp "dev/data/strings_1000.edn"))
