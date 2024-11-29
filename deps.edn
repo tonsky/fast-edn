@@ -4,8 +4,7 @@
  {:dev
   {:extra-paths ["dev" "test"]
    :extra-deps 
-   {io.github.tonsky/duti       {:git/sha "693074474eea1e67c02260e35c0c7e5a51c5db39"
-                                 #_#_:local/root "/ws/duti"}
+   {io.github.tonsky/duti       {:git/sha "53b241d2082e7944da6a683021f964aee958e69a"}
     com.cnuernber/charred       {:mvn/version "1.034"}
     metosin/jsonista            {:mvn/version "0.3.12"}
     cheshire/cheshire           {:mvn/version "5.13.0"}
@@ -20,4 +19,6 @@
               "-Djdk.attach.allowAttachSelf"
               "-XX:+UnlockDiagnosticVMOptions"
               "-XX:+DebugNonSafepoints"
-              "-XX:+EnableDynamicAgentLoading"]}}}
+              "-XX:+EnableDynamicAgentLoading"
+              #_"-XX:+UnlockDiagnosticVMOptions"
+              #_"-XX:+LogCompilation"]}}}

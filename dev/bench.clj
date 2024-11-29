@@ -56,7 +56,7 @@
                  (->> (sort-by File/.getName)))
           :let [content (slurp file)]]
     (duti/benching (File/.getName file)
-      (doseq [[name parse-fn] [["clojure.edn" edn/read-string]
+      (doseq [[name parse-fn] [#_["clojure.edn" edn/read-string]
                                #_["tools.reader" tools/read-string]
                                ["fast-edn" edn2/read-string]]]
         (duti/benching name
@@ -104,7 +104,6 @@
 ; │ fast-edn       │   62.529 μs │
 ; └────────────────┴─────────────┘
 
-
 (defn gen-strings [cnt]
   (with-open [w (io/writer (str "dev/data/strings_" cnt ".edn"))]
     (.write w "[")
@@ -122,7 +121,7 @@
       (.write w "\"")
       (dotimes [_ (+ 5 (rand-int 95))]
         (let [ch ^Character (rand-nth "абвгдеёжзиклмнопрстуфхцчщщъыьэюя!?*-+<>,.: /\n\\\"")]
-          (.write w 
+          (.write w
             (cond
               (= \\ ch)        "\\\\"
               (= \" ch)        "\\\""
@@ -137,21 +136,35 @@
   (let [s (slurp "dev/data/strings_1000.edn")]
     (duti.core/bench
       (clojure.edn/read-string s)))
-  (let [s (slurp "dev/data/strings_1000.edn")]
-    (duti.core/bench
-      (fast-edn.core/read-string s)))
+
+  (let [s1000 (slurp "dev/data/strings_1000.edn")
+        s250  (slurp "dev/data/strings_uni_250_safe.edn")]
+    (duti.core/bench (fast-edn.core/read-string s1000))
+    (duti.core/profile-times 100000 (fast-edn.core/read-string s1000))
+    (duti.core/bench (fast-edn.core/read-string s250))
+    (duti.core/profile-times 100000 (fast-edn.core/read-string s250))
+    (duti.core/bench (fast-edn.core/read-string s1000))
+    (duti.core/profile-times 100000 (fast-edn.core/read-string s1000)))
+
+  (def s1000 (slurp "dev/data/strings_1000.edn"))
+  (def s250  (slurp "dev/data/strings_uni_250_safe.edn"))
+
+  (do
+    (duti.core/bench (fast-edn.core/read-string s1000))
+    (duti.core/bench (fast-edn.core/read-string s250))
+    (duti.core/bench (fast-edn.core/read-string s1000)))
+
+  (duti.core/long-bench (fast-edn.core/read-string s1000))
+
+  (fast-edn.core/read-string (slurp "dev/data/strings_1000.edn"))
+  (fast-edn.core/read-string (slurp "dev/data/strings_uni_250_safe.edn"))
 
   (gen-uni-strings 250)
-  (let [s (slurp "dev/data/strings_uni_250.edn")]
-    (duti.core/bench
-      (clojure.edn/read-string s)))
-  (let [s (slurp "dev/data/strings_uni_250.edn")]
-    (duti.core/bench
-      (fast-edn.core/read-string s)))
-  
+  (let [s (slurp "dev/data/strings_uni_250_safe.edn")]
+    (fast-edn.core/read-string s))
+
   (bench-edn {:profile :long
-              :pattern #"strings_.*"})
-  )
+              :pattern #"strings_.*"}))
 
 ; ┌────────────────┬─────────────┬─────────────┐
 ; │ strings        │        1000 │     uni_250 │
@@ -182,7 +195,7 @@
 (comment
   (doseq [n (range 10 100 1000 10000)]
     (gen-keywords 10))
-  (bench-edn {:pattern #"keywords_\d+\.edn"}))
+  (bench-edn {:pattern #".*\.edn"}))
 
 ; ┌────────────────┬─────────────┬─────────────┬─────────────┬─────────────┐
 ; │ keywords       │          10 │         100 │        1000 │       10000 │

@@ -32,6 +32,22 @@ public final class EDNReader {
     return tempBuf;
   }
 
+  int digit(char ch) {
+    if ('0' <= ch && ch <= '9') {
+      return ch - '0';
+    }
+    
+    if ('a' <= ch && ch <= 'f') {
+      return ch - 'a' + 10;
+    }
+    
+    if ('A' <= ch && ch <= 'F') {
+      return ch - 'A' + 10;
+    }
+    
+    throw new RuntimeException("Unexpected digit: " + ch + context());
+  }
+
   final Object readString() throws Exception {
     charBuffer.clear();
     char[] buffer = reader.buffer();

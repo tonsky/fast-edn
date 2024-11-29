@@ -10,7 +10,7 @@ public final class CharBuffer {
   }
 
   public final char[] ensureCapacity(int newlen) {
-    if (newlen >= buffer.length) {
+    if (newlen > buffer.length) {
       char[] newbuffer = new char[newlen * 2];
       System.arraycopy(buffer, 0, newbuffer, 0, len);
       buffer = newbuffer;
