@@ -110,7 +110,8 @@
   36r123XYZ
   22/7
   \u0020
-  (meta (read-string "^:kw {}"))
+  (read-string "\">\\123<\"")
+  (clojure.core/read-string "\"\\/\"")
   (read-string (slurp "dev/data/keywords_1000.edn"))
   (.-numerator (read-string "1/-2"))
   (Character/digit \8 8)

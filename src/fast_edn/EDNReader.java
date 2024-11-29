@@ -17,29 +17,51 @@ public final class EDNReader {
   public final static Keyword TAG_KEY = Keyword.intern(null, "tag");
   public final static Keyword PARAM_TAGS_KEY = Keyword.intern(null, "param-tags");
 
-  public EDNReader(ILookup dataReaders, IFn defaultDataReader, boolean throwOnEOF, Object eofValue) {
-    this.dataReaders = dataReaders;
-    this.defaultDataReader = defaultDataReader;
-    this.throwOnEOF = throwOnEOF;
-    this.eofValue = eofValue;
-  }
 
-  final char[] tempRead(int nchars) throws EOFException {
-    // TODO share buf
-    final char[] tempBuf = new char[nchars];
-    if (reader.read(tempBuf, 0, nchars) == -1)
-      throw new EOFException();
-    return tempBuf;
-  }
+  /////////////////
+  // Accumulator //
+  /////////////////
 
-  byte digit8(char ch) {
-    if ('0' <= ch && ch <= '7') {
-      return (byte) (ch - '0');
+  private char[] accumulator = new char[32];
+  private int accumulatorLength = 0;
+
+  private void accumulatorEnsureCapacity(int len) {
+    if (len > accumulator.length) {
+      accumulator = Arrays.copyOf(accumulator, Integer.highestOneBit(len) << 1);
     }
-    throw new RuntimeException("Unexpected digit: " + ch + context());
   }
 
-  byte digit16(char ch) {
+  private void accumulatorAppend(char ch) {
+    // TODO if accumulatorLength + 1 <= accumulator.length
+    accumulatorEnsureCapacity(accumulatorLength + 1);
+    accumulator[accumulatorLength] = ch;
+    accumulatorLength += 1;
+  }
+
+  private void accumulatorAppend(char[] data, int start, int end) {
+    int len = end - start;
+    if (len > 0) {
+      accumulatorEnsureCapacity(accumulatorLength + len);
+      // TODO if (len < 5)
+      System.arraycopy(data, start, accumulator, accumulatorLength, len);
+      accumulatorLength += len;
+    }
+  }
+
+  private CharSeq accumulatorToCharSeq() {
+    return new CharSeq(accumulator, 0, accumulatorLength);
+  }
+
+  private String accumulatorToString() {
+    return new String(accumulator, 0, accumulatorLength);
+  }
+
+
+  ////////////////
+  // readString //
+  ////////////////
+
+  public byte digit16(int ch) {
     if ('0' <= ch && ch <= '9') {
       return (byte) (ch - '0');
     }
@@ -52,121 +74,143 @@ public final class EDNReader {
       return (byte) (ch - 'A' + 10);
     }
     
+    if (-1 == ch) {
+      throw new RuntimeException("EOF while reading" + context());
+    }
+
     throw new RuntimeException("Unexpected digit: " + ch + context());
   }
 
-  final Object readStringSimple() throws Exception {
-    char[] buffer = reader.buffer();
-    int startpos = reader.position();
-    int pos = startpos;
-    int len = buffer.length;
+  public String readSimpleString() {
+    char[] buf   = reader.buffer();
+    int    start = reader.position();
+    int    pos   = start;
+    int    len   = buf.length;
     for (; pos < len; ++pos) {
-      final char curChar = buffer[pos];
-      if (curChar == '"') {
-        final Object rv = new String(buffer, startpos, pos - startpos);
+      char ch = buf[pos];
+      if (ch == '"') {
         reader.position(pos + 1);
-        return rv;
-      } else if (curChar == '\\') {
-        return readStringComplex(buffer, startpos, pos);
+        return new String(buf, start, pos - start);
+      }
+      if (ch == '\\') {
+        break;
       }
     }
-    return readStringComplex(buffer, startpos, pos);
+    return readComplexString(buf, start, pos);
   }
 
-  final Object readStringComplex(char[] buffer, int startpos, int pos) throws Exception {
-    charBuffer.clear();
-    charBuffer.append(buffer, startpos, pos);
-    startpos = pos;
+  public char readUnicodeChar() {
+    char[] buf = reader.buffer();
+    int pos = reader.position();
+    if (pos + 4 < reader.bufferLength()) {
+      int ch = (digit16(buf[pos    ]) << 12)
+             + (digit16(buf[pos + 1]) << 8)
+             + (digit16(buf[pos + 2]) << 4)
+             +  digit16(buf[pos + 3]);
+      reader.position(pos + 4);
+      return (char) ch;
+    }
 
-    while (buffer != null) {
-      int len = buffer.length;
+    int ch = (digit16(reader.read()) << 12)
+           + (digit16(reader.read()) << 8)
+           + (digit16(reader.read()) << 4)
+           +  digit16(reader.read());
+    return (char) ch;
+  }
+
+  public char readOctalChar(int ch) {
+    int value = ch - '0';
+    for (int i = 0; i < 2; ++i) {
+      ch = reader.read();
+      if (ch >= '0' && ch <= '7') {
+        value = (value << 3) + (ch - '0');
+      } else {
+        reader.unread();
+        break;
+      }
+    }
+
+    if (value > 0377) {
+      throw Util.runtimeException("Octal escape sequence must be in range [0, 377], got: " + value + context());
+    }
+    
+    return (char) value;
+  }
+
+  public String readComplexString(char[] buf, int start, int pos) {
+    accumulatorLength = 0;
+    accumulatorAppend(buf, start, pos);
+    reader.position(pos);
+
+    outer:
+    while (true) {
+      buf = reader.buffer();
+      if (buf == null) {
+        throw new RuntimeException("EOF while reading string: " + accumulatorToString() + context());
+      }
+      start = reader.position();
+      pos = start;
+      int len = reader.bufferLength();
+
       for (; pos < len; ++pos) {
-        final char curChar = buffer[pos];
-        if (curChar == '"') {
-          final Object rv = charBuffer.toString(buffer, startpos, pos);
-          reader.position(pos + 1);
-          return rv;
-        } else if (curChar == '\\') {
-          charBuffer.append(buffer, startpos, pos);
-          int idata = reader.readFrom(pos + 1);
-          if (idata == -1)
-            throw new EOFException();
-          if (idata >= '0' && idata <= '7') {
-            int acc = (idata - '0');
-            idata = reader.read();
-            if (idata == -1) {
-              throw new EOFException("EOF while reading string: " + charBuffer.toString());
-            } else if (idata >= '0' && idata <= '7') {
-              acc = (acc << 3) + (idata - '0');
-              idata = reader.read();
-              if (idata == -1) {
-                throw new EOFException("EOF while reading string: " + charBuffer.toString());
-              } else if (idata >= '0' && idata <= '7') {
-                acc = (acc << 3) + (idata - '0');
-              } else {
-                reader.unread();
-              }
-            } else {
-              reader.unread();
-            }
-            if (acc > 0377) {
-              throw Util.runtimeException("Octal escape sequence must be in range [0, 377], got: " + acc + context());
-            }
-            charBuffer.append((char) acc);
+        final char ch = buf[pos];
+
+        if (ch == '\\') {
+          accumulatorAppend(buf, start, pos);
+          int ch2 = reader.readFrom(pos + 1);
+
+          if (ch2 == '"') {
+            accumulatorAppend('"');
+          } else if (ch2 == '\\') {
+            accumulatorAppend('\\');
+          } else if (ch2 == 'n') {
+            accumulatorAppend('\n');
+          } else if (ch2 == 'r') {
+            accumulatorAppend('\r');
+          } else if (ch2 == 'u') {
+            accumulatorAppend(readUnicodeChar());
+          } else if (ch2 == 't') {
+            accumulatorAppend('\t');
+          } else if (ch2 >= '0' && ch2 <= '7') {
+            accumulatorAppend(readOctalChar(ch2));
+          } else if (ch2 == 'b') {
+            accumulatorAppend('\b');
+          } else if (ch2 == 'f') {
+            accumulatorAppend('\f');
+          } else if (ch2 == -1) {
+            throw new RuntimeException("EOF reading string: " + context());
           } else {
-            final char data = (char) idata;
-            switch (data) {
-              case '"':
-              case '\\':
-              case '/':
-                charBuffer.append(data);
-                break;
-              case 'b':
-                charBuffer.append('\b');
-                break;
-              case 'f':
-                charBuffer.append('\f');
-                break;
-              case 'r':
-                charBuffer.append('\r');
-                break;
-              case 'n':
-                charBuffer.append('\n');
-                break;
-              case 't':
-                charBuffer.append('\t');
-                break;
-              case 'u':
-                pos = reader.position();
-                buffer = reader.buffer();
-                if (pos + 4 < buffer.length) {
-                  int ch = (digit16(buffer[pos    ]) << 12)
-                         + (digit16(buffer[pos + 1]) << 8)
-                         + (digit16(buffer[pos + 2]) << 4)
-                         +  digit16(buffer[pos + 3]);
-                  charBuffer.append((char) ch);
-                  reader.position(pos + 4);
-                } else {
-                  final char[] temp = tempRead(4);
-                  charBuffer.append((char) (Integer.parseInt(new String(temp, 0, 4), 16)));
-                }
-                break;
-              default:
-                throw new Exception("Parse error - Unrecognized escape character: " + data);
-            }
+            throw new RuntimeException("Unrecognized escape character while reading string: " + ((char) ch2) + context());
           }
-          buffer = reader.buffer();
-          startpos = reader.position();
-          // pos will be incremented in loop update
-          pos = startpos - 1;
+
+          continue outer;
+        } else if (ch == '"') {
+          reader.position(pos + 1);
+          accumulatorAppend(buf, start, pos);
+          return accumulatorToString();
         }
       }
-      charBuffer.append(buffer, startpos, len);
-      buffer = reader.nextBuffer();
-      startpos = 0;
-      pos = 0;
+
+      accumulatorAppend(buf, start, len);
+      reader.nextBuffer();
     }
-    throw new EOFException("Parse error - EOF while reading string: " + charBuffer.toString());
+  }
+
+  // EDNReader
+
+  public EDNReader(ILookup dataReaders, IFn defaultDataReader, boolean throwOnEOF, Object eofValue) {
+    this.dataReaders = dataReaders;
+    this.defaultDataReader = defaultDataReader;
+    this.throwOnEOF = throwOnEOF;
+    this.eofValue = eofValue;
+  }
+
+  final char[] tempRead(int nchars) {
+    // TODO share buf
+    final char[] tempBuf = new char[nchars];
+    if (reader.read(tempBuf, 0, nchars) == -1)
+      throw new RuntimeException("EOF while reading" + context());
+    return tempBuf;
   }
 
   final Object readCharacter() throws Exception {
@@ -600,7 +644,7 @@ public final class EDNReader {
       int val = reader.eatwhite();
       switch (val) {
       case '"':
-        return readStringSimple();
+        return readSimpleString();
       case ':':
         return readKeyword();
       case '{': {
