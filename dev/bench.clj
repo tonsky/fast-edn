@@ -162,6 +162,7 @@
     (duti.core/bench (fast-edn.core/read-string strings-250))
     (duti.core/bench (fast-edn.core/read-string strings-1000)))
 
+  (duti.core/bench (clojure.edn/read-string strings-250))
   (duti.core/long-bench (fast-edn.core/read-string strings-250))
   (duti.core/long-bench (fast-edn.core/read-string s1000))
 

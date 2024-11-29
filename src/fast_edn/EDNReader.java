@@ -17,6 +17,13 @@ public final class EDNReader {
   public final static Keyword TAG_KEY = Keyword.intern(null, "tag");
   public final static Keyword PARAM_TAGS_KEY = Keyword.intern(null, "param-tags");
 
+  public EDNReader(ILookup dataReaders, IFn defaultDataReader, boolean throwOnEOF, Object eofValue) {
+    this.dataReaders = dataReaders;
+    this.defaultDataReader = defaultDataReader;
+    this.throwOnEOF = throwOnEOF;
+    this.eofValue = eofValue;
+  }
+
 
   /////////////////
   // Accumulator //
@@ -61,6 +68,24 @@ public final class EDNReader {
   // readString //
   ////////////////
 
+  public String readSimpleString() {
+    char[] buf   = reader.buffer();
+    int    start = reader.position();
+    int    pos   = start;
+    int    len   = buf.length;
+    for (; pos < len; ++pos) {
+      char ch = buf[pos];
+      if (ch == '"') {
+        reader.position(pos + 1);
+        return new String(buf, start, pos - start);
+      }
+      if (ch == '\\') {
+        break;
+      }
+    }
+    return readComplexString(buf, start, pos);
+  }
+
   public byte digit16(int ch) {
     if ('0' <= ch && ch <= '9') {
       return (byte) (ch - '0');
@@ -79,24 +104,6 @@ public final class EDNReader {
     }
 
     throw new RuntimeException("Unexpected digit: " + ch + context());
-  }
-
-  public String readSimpleString() {
-    char[] buf   = reader.buffer();
-    int    start = reader.position();
-    int    pos   = start;
-    int    len   = buf.length;
-    for (; pos < len; ++pos) {
-      char ch = buf[pos];
-      if (ch == '"') {
-        reader.position(pos + 1);
-        return new String(buf, start, pos - start);
-      }
-      if (ch == '\\') {
-        break;
-      }
-    }
-    return readComplexString(buf, start, pos);
   }
 
   public char readUnicodeChar() {
@@ -118,10 +125,10 @@ public final class EDNReader {
     return (char) ch;
   }
 
-  public char readOctalChar(int ch) {
-    int value = ch - '0';
-    for (int i = 0; i < 2; ++i) {
-      ch = reader.read();
+  public char readOctalChar() {
+    int value = 0;
+    for (int i = 0; i < 3; ++i) {
+      int ch = reader.read();
       if (ch >= '0' && ch <= '7') {
         value = (value << 3) + (ch - '0');
       } else {
@@ -172,7 +179,8 @@ public final class EDNReader {
           } else if (ch2 == 't') {
             accumulatorAppend('\t');
           } else if (ch2 >= '0' && ch2 <= '7') {
-            accumulatorAppend(readOctalChar(ch2));
+            reader.unread();
+            accumulatorAppend(readOctalChar());
           } else if (ch2 == 'b') {
             accumulatorAppend('\b');
           } else if (ch2 == 'f') {
@@ -196,69 +204,73 @@ public final class EDNReader {
     }
   }
 
-  // EDNReader
 
-  public EDNReader(ILookup dataReaders, IFn defaultDataReader, boolean throwOnEOF, Object eofValue) {
-    this.dataReaders = dataReaders;
-    this.defaultDataReader = defaultDataReader;
-    this.throwOnEOF = throwOnEOF;
-    this.eofValue = eofValue;
-  }
+  ///////////////////
+  // readCharacter //
+  ///////////////////
 
-  final char[] tempRead(int nchars) {
-    // TODO share buf
-    final char[] tempBuf = new char[nchars];
-    if (reader.read(tempBuf, 0, nchars) == -1)
-      throw new RuntimeException("EOF while reading" + context());
-    return tempBuf;
-  }
-
-  final Object readCharacter() throws Exception {
-    int ch = reader.read();
-    if (-1 == ch) {
-      throw Util.runtimeException("EOF while reading character");
+  private boolean compareNext(int ch, String s) {
+    if ((char) ch != s.charAt(0)) {
+      return false;
     }
+
+    for (int i = 1; i < s.length(); ++i) {
+      ch = reader.read();
+      if (ch == -1) {
+        throw new RuntimeException("EOF while reading" + context());
+      }
+      if ((char) ch != s.charAt(i)) {
+        return false;
+      }
+    }
+    return true;
+  }
+  
+  public Character readCharacter() {
+    int ch = reader.read();
+    
+    if (-1 == ch) {
+      throw new RuntimeException("EOF while reading character" + context());
+    }
+
     int peek = reader.read();
     reader.unread();
+
     if (peek == -1 || CharReader.isBoundary(peek)) {
       return (char) ch;
-    } else if ('u' == ch) {
-      final char[] temp = tempRead(4);
-      ch = Integer.parseInt(new CharSeq(temp), 0, 4, 16);
-      if (ch >= 0xD800 && ch <= 0xDFFF) { // surrogate code unit?
-        throw Util.runtimeException("Invalid character constant: \\u" + new String(temp));
+    }
+
+    if (ch == 'u') {
+      ch = readUnicodeChar();
+      // surrogate code unit?
+      if (ch >= 0xD800 && ch <= 0xDFFF) {
+        throw new RuntimeException("Invalid character constant: \\u" + new Formatter().format("%04d", ch));
       }
-      return (char) ch;
-    } else if ('o' == ch) {
-      ch = 0;
-      while (true) {
-        peek = reader.read();
-        if (peek == -1 || peek < '0' || peek > '7') {
-          reader.unread();
-          break;
-        }
-        ch = ch * 8 + Character.digit(peek, 8);
-      }
-      if (ch > 0377) {
-        throw Util.runtimeException("Octal escape sequence must be in range [0, 377]" + context());
-      }
-      return (char) ch;
-    } else if ('n' == ch && "ewline".contentEquals(new CharSeq(tempRead(6)))) {
+      return Character.valueOf((char) ch);
+    } else if (ch == 'o') {
+      return Character.valueOf(readOctalChar());
+    } else if (compareNext(ch, "newline")) {
       return '\n';
-    } else if ('r' == ch && "eturn".contentEquals(new CharSeq(tempRead(5)))) {
+    } else if (compareNext(ch, "return")) {
       return '\r';
-    } else if ('s' == ch && "pace".contentEquals(new CharSeq(tempRead(4)))) {
+    } else if (compareNext(ch, "space")) {
       return ' ';
-    } else if ('t' == ch && "ab".contentEquals(new CharSeq(tempRead(2)))) {
+    } else if (compareNext(ch, "tab")) {
       return '\t';
-    } else if ('b' == ch && "ackspace".contentEquals(new CharSeq(tempRead(8)))) {
+    } else if (compareNext(ch, "backspace")) {
       return '\b';
-    } else if ('f' == ch && "ormfeed".contentEquals(new CharSeq(tempRead(7)))) {
+    } else if (compareNext(ch, "formfeed")) {
       return '\f';
     }
-    throw Util.runtimeException("Error parsing character" + context());
+
+    throw new RuntimeException("Error parsing character" + context());
   }
 
+
+  ////////////////
+  // readSymbol //
+  ////////////////
+  
   final Object readSymbol(int firstChar, boolean forKeyword) throws Exception {
     boolean usedBuffer = false;
     char[]  buffer     = reader.buffer();
@@ -708,7 +720,7 @@ public final class EDNReader {
         }
       }
       case '#': {
-        final int nextChar = reader.read();
+        int nextChar = reader.read();
         if (nextChar == -1) {
           throw Util.runtimeException("EOF while reading dispatch macro");
         }
@@ -721,16 +733,16 @@ public final class EDNReader {
         }
 
         if (nextChar == '#') {
-          final char[] data = tempRead(3);
-          if (data[0] == 'I' && data[1] == 'n' && data[2] == 'f')
+          nextChar = reader.read();
+          if (compareNext(nextChar, "Inf")) {
             return Double.POSITIVE_INFINITY;
-          if (data[0] == '-' && data[1] == 'I' && data[2] == 'n' && reader.read() == 'f') {
+          } else if (compareNext(nextChar, "-Inf")) {
             return Double.NEGATIVE_INFINITY;
-          }
-          if (data[0] == 'N' && data[1] == 'a' && data[2] == 'N') {
+          } else if (compareNext(nextChar, "NaN")) {
             return Double.NaN;
+          } else {
+            throw new RuntimeException("Unknown symbolic value" + context());
           }
-          throw Util.runtimeException("Unknown symbolic value: ##" + new String(data));
         }
 
         if (nextChar == ':') {
