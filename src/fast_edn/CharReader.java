@@ -112,7 +112,7 @@ public final class CharReader {
     return v >= '0' && v <= '9';
   }
 
-  public final char eat(IntPredicate pred) {
+  public final int eat(IntPredicate pred) {
     char[] buffer = curBuffer;
     while (buffer != null) {
       final int len = buffer.length;
@@ -125,10 +125,10 @@ public final class CharReader {
       }
       buffer = nextBuffer();
     }
-    return 0;
+    return -1;
   }
 
-  public final char eatwhite() {
+  public final int eatwhite() {
     return eat(CharReader::isWhitespace);
   }
 

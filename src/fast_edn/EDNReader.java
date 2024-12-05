@@ -7,11 +7,10 @@ import java.util.*;
 import java.util.stream.*;
 
 @SuppressWarnings("unchecked")
-public final class EDNReader {
-  CharReader reader;
+public class EDNReader {
+  public CharReader reader;
   public final boolean throwOnEOF;
   public final Object eofValue;
-  public final CharBuffer charBuffer = new CharBuffer();
   public final ILookup dataReaders;
   public final IFn defaultDataReader;
   public final static Keyword TAG_KEY = Keyword.intern(null, "tag");
@@ -24,28 +23,32 @@ public final class EDNReader {
     this.eofValue = eofValue;
   }
 
+  public void beginParse(CharReader rdr) {
+    reader = rdr;
+  }
+
 
   /////////////////
   // Accumulator //
   /////////////////
 
-  private char[] accumulator = new char[32];
-  private int accumulatorLength = 0;
+  public char[] accumulator = new char[32];
+  public int accumulatorLength = 0;
 
-  private void accumulatorEnsureCapacity(int len) {
+  public void accumulatorEnsureCapacity(int len) {
     if (len > accumulator.length) {
       accumulator = Arrays.copyOf(accumulator, Integer.highestOneBit(len) << 1);
     }
   }
 
-  private void accumulatorAppend(char ch) {
+  public void accumulatorAppend(char ch) {
     // TODO if accumulatorLength + 1 <= accumulator.length
     accumulatorEnsureCapacity(accumulatorLength + 1);
     accumulator[accumulatorLength] = ch;
     accumulatorLength += 1;
   }
 
-  private void accumulatorAppend(char[] data, int start, int end) {
+  public void accumulatorAppend(char[] data, int start, int end) {
     int len = end - start;
     if (len > 0) {
       accumulatorEnsureCapacity(accumulatorLength + len);
@@ -55,11 +58,11 @@ public final class EDNReader {
     }
   }
 
-  private CharSeq accumulatorToCharSeq() {
+  public CharSeq accumulatorToCharSeq() {
     return new CharSeq(accumulator, 0, accumulatorLength);
   }
 
-  private String accumulatorToString() {
+  public String accumulatorToString() {
     return new String(accumulator, 0, accumulatorLength);
   }
 
@@ -139,7 +142,7 @@ public final class EDNReader {
     }
 
     if (value > 0377) {
-      throw Util.runtimeException("Octal escape sequence must be in range [0, 377], got: " + value + context());
+      throw new RuntimeException("Octal escape sequence must be in range [0, 377], got: " + value + context());
     }
     
     return (char) value;
@@ -160,9 +163,9 @@ public final class EDNReader {
       int len = reader.bufferLength();
 
       for (; pos < len; ++pos) {
-        char ch = buf[pos];
+        char ch1 = buf[pos];
 
-        if (ch == '\\') {
+        if (ch1 == '\\') {
           accumulatorAppend(buf, start, pos);
           int ch2 = reader.readFrom(pos + 1);
 
@@ -192,7 +195,7 @@ public final class EDNReader {
           }
 
           continue outer;
-        } else if (ch == '"') {
+        } else if (ch1 == '"') {
           reader.position(pos + 1);
           accumulatorAppend(buf, start, pos);
           return accumulatorToString();
@@ -209,7 +212,7 @@ public final class EDNReader {
   // readCharacter //
   ///////////////////
 
-  private boolean compareNext(int ch, String s) {
+  public boolean compareNext(int ch, String s) {
     if ((char) ch != s.charAt(0)) {
       return false;
     }
@@ -244,7 +247,7 @@ public final class EDNReader {
       ch = readUnicodeChar();
       // surrogate code unit?
       if (ch >= 0xD800 && ch <= 0xDFFF) {
-        throw new RuntimeException("Invalid character constant: \\u" + new Formatter().format("%04d", ch));
+        throw new RuntimeException("Invalid character constant: \\u" + new Formatter().format("%04d", ch) + context());
       }
       return Character.valueOf((char) ch);
     } else if (ch == 'o') {
@@ -373,6 +376,29 @@ public final class EDNReader {
     return Symbol.intern(new String(buf, start, slash - start),
                          new String(buf, slash + 1, end - (slash + 1)));
   }
+
+
+  ////////////////
+  // readTagged //
+  ////////////////
+
+  public Object readTagged() {
+    Object tag = readObject(true);
+
+    if (tag instanceof Symbol) {
+      Object value = readObject(true);
+      IFn dataReader = (IFn) RT.get(dataReaders, tag);
+
+      if (dataReader != null) {
+        return dataReader.invoke(value);
+      } else if (defaultDataReader != null) {
+        return defaultDataReader.invoke(tag, value);
+      }
+    }
+
+    throw new RuntimeException("No dispatch macro for: #" + tag + context());
+  }
+
 
   /////////////////
   // readKeyword //
@@ -561,7 +587,7 @@ public final class EDNReader {
   }
 
   public Number finalizeFloat(char[] buf, int start, int end) {
-    final int len = end - start;
+    int len = end - start;
     if (buf[end - 1] == 'M') {
       return new BigDecimal(buf, start, len - 1);
     } else {
@@ -608,83 +634,135 @@ public final class EDNReader {
     }
   }
 
-
-  ////////////////////
-
-  public final String context() {
-    String context = reader.context(200);
-    if (context != null) {
-      return ", context:\n" + context;
+  public Number readNumberNegative() {
+    Number n = readNumber();
+    if (n instanceof Long) {
+      return Long.valueOf(-((Long) n).longValue());
+    } else if (n instanceof Double) {
+      return Double.valueOf(-((Double) n).doubleValue());
+    } else if (n instanceof BigInt) {
+      return BigInt.fromBigInteger(((BigInt) n).toBigInteger().negate());
+    } else if (n instanceof BigDecimal) {
+      return ((BigDecimal) n).negate();
+    } else if (n instanceof Ratio) {
+      BigInteger numerator = ((Ratio) n).numerator;
+      BigInteger denominator = ((Ratio) n).denominator;
+      return new Ratio(numerator.negate(), denominator);
     } else {
-      return "";
+      throw new RuntimeException("Unexpected number class " + toClassString(n) + context());
     }
   }
 
-  public final Object readList() throws Exception {
+  public Double readSymbolicValue() {
+    int ch = reader.read();
+    if (compareNext(ch, "Inf")) {
+      return Double.POSITIVE_INFINITY;
+    } else if (compareNext(ch, "-Inf")) {
+      return Double.NEGATIVE_INFINITY;
+    } else if (compareNext(ch, "NaN")) {
+      return Double.NaN;
+    } else {
+      throw new RuntimeException("Unknown symbolic value" + context());
+    }
+  }
+
+
+  //////////////
+  // readList //
+  //////////////
+
+  public IPersistentList readList() {
     ArrayList acc = new ArrayList();
+
     while (!reader.eof()) {
-      final char nextChar = reader.eatwhite();
-      if (nextChar == ')') {
+      int ch = reader.eatwhite();
+
+      if (ch == ')') {
         IPersistentList res = PersistentList.EMPTY;
-        for(ListIterator i = acc.listIterator(acc.size()); i.hasPrevious(); ) {
+        for (ListIterator i = acc.listIterator(acc.size()); i.hasPrevious(); ) {
           res = (IPersistentList) res.cons(i.previous());
         }
         return res;
-      } else if (nextChar == 0) {
+      } else if (ch == -1) {
         break;
       } else {
         reader.unread();
         acc.add(readObject());
       }
     }
-    throw Util.runtimeException("EOF while reading list: " + acc.stream().map(String::valueOf).collect(Collectors.joining(" ", "(", ")")) + context());
+
+    throw new RuntimeException("EOF while reading list: " + toUnfinishedCollString(acc) + context());
   }
 
-  public final Object readVector() throws Exception {
+
+  ////////////////
+  // readVector //
+  ////////////////
+
+  public PersistentVector readVector() {
     ITransientCollection acc = PersistentVector.EMPTY.asTransient();
+
     while (!reader.eof()) {
-      final char nextChar = reader.eatwhite();
-      if (nextChar == ']') {
-        return acc.persistent();
-      } else if (nextChar == 0) {
+      int ch = reader.eatwhite();
+
+      if (ch == ']') {
+        return (PersistentVector) acc.persistent();
+      } else if (ch == -1) {
         break;
       } else {
         reader.unread();
         acc = acc.conj(readObject());
       }
     }
-    throw Util.runtimeException("EOF while reading vector: " + String.valueOf(acc.persistent()) + context());
+
+    throw new RuntimeException("EOF while reading vector: " + toUnfinishedCollString(acc.persistent()) + context());
   }
 
-  public final Object readSet() throws Exception {
+
+  /////////////
+  // readSet //
+  /////////////
+
+  public PersistentHashSet readSet() {
     ATransientSet acc = (ATransientSet) PersistentHashSet.EMPTY.asTransient();
     int count = 0;
+
     while (!reader.eof()) {
-      final char nextChar = reader.eatwhite();
-      if (nextChar == '}') {
-        return acc.persistent();
-      } else if (nextChar == 0) {
+      int ch = reader.eatwhite();
+
+      if (ch == '}') {
+        return (PersistentHashSet) acc.persistent();
+      } else if (ch == -1) {
         break;
       } else {
         reader.unread();
         Object key = readObject();
         acc = (ATransientSet) acc.conj(key);
-        if (++count != acc.count()) {
-          throw new IllegalArgumentException("Duplicate key: " + key + " reading set: " + String.valueOf(acc.persistent()) + context());
+        if (count + 1 != acc.count()) {
+          throw new RuntimeException("Duplicate key: " + key + " reading set: " + toUnfinishedCollString(acc.persistent()) + context());
         }
+        count = count + 1;
       }
     }
-    throw Util.runtimeException("EOF while reading set: " + String.valueOf(acc.persistent()) + context());
+
+    throw new RuntimeException("EOF while reading set: " + toUnfinishedCollString(acc.persistent()) + context());
   }
 
-  public final Object readMap(String ns) throws Exception {
+
+  /////////////
+  // readMap //
+  /////////////
+
+  public IPersistentMap readMap(String ns) {
     ATransientMap acc = (ATransientMap) PersistentArrayMap.EMPTY.asTransient();
     int count = 0;
+
     while (!reader.eof()) {
-      char nextChar = reader.eatwhite();
-      if (nextChar == '}') {
+      int ch = reader.eatwhite();
+
+      if (ch == '}') {
         return acc.persistent();
-      } else if (nextChar == 0) {
+      } else if (ch == -1) {
         break;
       } else {
         reader.unread();
@@ -697,7 +775,7 @@ public final class EDNReader {
             } else if (kw.getNamespace().equals("_")) {
               key = Keyword.intern(null, kw.getName());
             }
-          } else if(key instanceof Symbol) {
+          } else if (key instanceof Symbol) {
             Symbol s = (Symbol) key;
             if (s.getNamespace() == null) {
               key = Symbol.intern(ns, s.getName());
@@ -706,23 +784,33 @@ public final class EDNReader {
             }
           }
         }
-        nextChar = reader.eatwhite();
-        if (nextChar == '}') {
-          throw Util.runtimeException("Map literal must contain an even number of forms: " + String.valueOf(acc.persistent()) + context());
+
+        ch = reader.eatwhite();
+        if (ch == '}') {
+          throw new RuntimeException("Map literal must contain an even number of forms: " + toUnfinishedCollString(acc.persistent()) + context());
         }
+
         reader.unread();
         Object val = readObject();
         acc = (ATransientMap) acc.assoc(key, val);
-        if (++count != acc.count()) {
-          throw new IllegalArgumentException("Duplicate key: " + key + " reading map: " + String.valueOf(acc.persistent()) + context());
+        if (count + 1 != acc.count()) {
+          throw new IllegalArgumentException("Duplicate key: " + key + " reading map: " + toUnfinishedCollString(acc.persistent()) + context());
         }
+        count = count + 1;
       }
     }
-    throw Util.runtimeException("EOF while reading map: " + String.valueOf(acc.persistent()) + context());
+
+    throw new RuntimeException("EOF while reading map: " + toUnfinishedCollString(acc.persistent()) + context());
   }
 
-  public final Object readMeta() throws Exception {
+
+  //////////////
+  // readMeta //
+  //////////////
+
+  public Object readMeta() {
     Object meta = readObject(true);
+
     if (meta instanceof Symbol || meta instanceof String) {
       meta = RT.map(TAG_KEY, meta);
     } else if (meta instanceof IPersistentVector) {
@@ -730,174 +818,205 @@ public final class EDNReader {
     } else if (meta instanceof Keyword) {
       meta = RT.map(meta, RT.T);
     } else if (!(meta instanceof IPersistentMap)) {
-      throw new IllegalArgumentException("Metadata must be Symbol, Keyword, String, Map or Vector");
+      throw new RuntimeException("Metadata must be Symbol, Keyword, String, Map or Vector, got " + toClassString(meta) + context());
     }
 
-    Object value = readObject(true);
-    if (!(value instanceof IMeta)) {
-      throw new IllegalArgumentException("Can't put meta on " + (value == null ? "null" : value.getClass()) + ": " + value + context());
+    Object obj = readObject(true);
+    if (!(obj instanceof IMeta)) {
+      throw new RuntimeException("Can't put meta on " + toClassString(obj) + context());
     }
-    IPersistentMap ometa = (IPersistentMap) RT.meta(value);
+
+    IPersistentMap objMeta = (IPersistentMap) RT.meta(obj);
     meta = ((IKVReduce) meta).kvreduce(new AFn() {
       @Override
-      public Object invoke(Object ometa, Object key, Object value) {
-        return RT.assoc(ometa, key, value);
+      public Object invoke(Object objMeta, Object key, Object obj) {
+        return RT.assoc(objMeta, key, obj);
       }
-    }, ometa);
-    return ((IObj) value).withMeta((IPersistentMap) meta);
+    }, objMeta);
+
+    return ((IObj) obj).withMeta((IPersistentMap) meta);
   }
 
-  public final Object readObject() throws Exception {
+
+  ////////////////
+  // readObject //
+  ////////////////
+
+  public Object readObject() {
     return readObject(throwOnEOF);
   }
 
-  public final Object readObject(boolean throwOnEOF) throws Exception {
-    if (reader == null)
+  public Object readObject(boolean throwOnEOF) {
+    if (reader == null) {
       return null;
+    }
 
     while (true) {
-      int val = reader.eatwhite();
-      switch (val) {
-      case '"':
-        return readString();
-      case ':':
-        return readKeyword();
-      case '{': {
-        return readMap(null);
-      }
-      case '[': {
-        return readVector();
-      }
-      case '(': {
-        return readList();
-      }
-      case ';': {
-        reader.eat(ch -> '\n' != ch && '\r' != ch);
-        continue;
-      }
-      case '-': {
-        val = reader.read();
-        if (-1 == val || CharReader.isBoundary(val)) {
-          return Symbol.intern(null, "-");
+      int ch1 = reader.eatwhite();
+
+      switch (ch1) {
+        case '"': {
+          return readString();
         }
-        if (CharReader.isDigit(val)) {
-          reader.unread();
-          Object res = readNumber();
-          if (res instanceof Long) {
-            return Long.valueOf(-((Long) res).longValue());
-          } else if (res instanceof Double) {
-            return Double.valueOf(-((Double) res).doubleValue());
-          } else if (res instanceof BigInt) {
-            return BigInt.fromBigInteger(((BigInt) res).toBigInteger().negate());
-          } else if (res instanceof BigDecimal) {
-            return ((BigDecimal) res).negate();
-          } else if (res instanceof Ratio) {
-            BigInteger numerator = ((Ratio) res).numerator;
-            BigInteger denominator = ((Ratio) res).denominator;
-            return new Ratio(numerator.negate(), denominator);
-          } else {
-            throw Util.runtimeException("Unexpected number type " + res.getClass().getName() + ": " + res + context());
-          }
-        } else {
-          reader.unread();
-          return continueReadingSymbol('-');
+
+        case ':': {
+          return readKeyword();
         }
-      }
-      case '^': {
-        return readMeta();
-      }
-      case '\\': {
-        return readCharacter();
-      }
-      case '+': {
-        val = reader.read();
-        if (-1 == val || CharReader.isBoundary(val)) {
-          return Symbol.intern(null, "+");
+
+        case '{': {
+          return readMap(null);
         }
-        if (CharReader.isDigit(val)) {
-          reader.unread();
-          return readNumber();
-        } else {
-          reader.unread();
-          return continueReadingSymbol('+');
+
+        case '[': {
+          return readVector();
         }
-      }
-      case '#': {
-        int nextChar = reader.read();
-        if (nextChar == -1) {
-          throw Util.runtimeException("EOF while reading dispatch macro");
+
+        case '(': {
+          return readList();
         }
-        if (nextChar == '{') {
-          return readSet();
-        }
-        if (nextChar == '_') {
-          readObject(true);
+
+        case ';': {
+          reader.eat(ch -> '\n' != ch && '\r' != ch);
           continue;
         }
 
-        if (nextChar == '#') {
-          nextChar = reader.read();
-          if (compareNext(nextChar, "Inf")) {
-            return Double.POSITIVE_INFINITY;
-          } else if (compareNext(nextChar, "-Inf")) {
-            return Double.NEGATIVE_INFINITY;
-          } else if (compareNext(nextChar, "NaN")) {
-            return Double.NaN;
+        case '-': {
+          int ch2 = reader.read();
+
+          if (-1 == ch2 || CharReader.isBoundary(ch2)) {
+            return Symbol.intern(null, "-");
+          } else if (CharReader.isDigit(ch2)) {
+            reader.unread();
+            return readNumberNegative();
           } else {
-            throw new RuntimeException("Unknown symbolic value" + context());
+            reader.unread();
+            return continueReadingSymbol('-');
           }
         }
 
-        if (nextChar == ':') {
-          Keyword ns = (Keyword) readKeyword();
-          if (ns.getNamespace() != null) {
-            throw new RuntimeException("Namespaced map should use non-namespaced keyword: :" + ns + context());
-          }
-          val = reader.eatwhite();
-          if (val != '{') {
-            throw new RuntimeException("Namespaced map must specify a map: " + context());
-          }
-          return readMap(ns.getName());
+        case '^': {
+          return readMeta();
         }
 
-        // Tagged Literals
-        reader.unread();
-        Object tag = readObject(true);
-        if (tag instanceof Symbol) {
-          Object value = readObject(true);
-          IFn dataReader = (IFn) RT.get(dataReaders, tag);
-          if (dataReader != null) {
-            return dataReader.invoke(value);
-          } else if (defaultDataReader != null) {
-            return defaultDataReader.invoke(tag, value);
+        case '\\': {
+          return readCharacter();
+        }
+
+        case '+': {
+          int ch2 = reader.read();
+
+          if (-1 == ch2 || CharReader.isBoundary(ch2)) {
+            return Symbol.intern(null, "+");
+          } else if (CharReader.isDigit(ch2)) {
+            reader.unread();
+            return readNumber();
+          } else {
+            reader.unread();
+            return continueReadingSymbol('+');
           }
         }
 
-        throw Util.runtimeException("No dispatch macro for: #" + Character.toString(nextChar));
-      }
-      case 0:
-        if (reader.eof()) {
+        case '#': {
+          int ch2 = reader.read();
+
+          if (ch2 == -1) {
+            throw new RuntimeException("EOF while reading dispatch macro" + context());
+          }
+
+          if (ch2 == '{') {
+            return readSet();
+          }
+
+          if (ch2 == '_') {
+            readObject(true);
+            continue;
+          }
+
+          if (ch2 == '#') {
+            return readSymbolicValue();
+          }
+
+          if (ch2 == ':') {
+            Keyword ns = (Keyword) readKeyword();
+
+            if (ns.getNamespace() != null) {
+              throw new RuntimeException("Namespaced map should use non-namespaced keyword: " + ns + context());
+            }
+
+            int ch3 = reader.eatwhite();
+            if (ch3 != '{') {
+              throw new RuntimeException("Namespaced map must specify a map: " + ns + context());
+            }
+
+            return readMap(ns.getName());
+          }
+
+          reader.unread();
+          return readTagged();
+        }
+
+        case -1: {
           if (throwOnEOF) {
-            throw Util.runtimeException("EOF while reading");
+            throw new RuntimeException("EOF while reading" + context());
           } else {
             return eofValue;
           }
         }
-        // fallthrough intentional
-      default:
-        if (CharReader.isNumberChar(val)) {
-          reader.unread();
-          return readNumber();
-        } else if (!CharReader.isBoundary(val)) {
-          reader.unread();
-          return readSymbol();
+
+        default: {
+          if (CharReader.isNumberChar(ch1)) {
+            reader.unread();
+            return readNumber();
+          } else if (!CharReader.isBoundary(ch1)) {
+            reader.unread();
+            return readSymbol();
+          }
+
+          throw new RuntimeException("Unexpected character: " + ch1 + context());
         }
-        throw new Exception("Parse error - Unexpected character - " + val);
       }
     }
   }
 
-  public void beginParse(CharReader rdr) {
-    reader = rdr;
+
+  /////////////
+  // context //
+  /////////////
+
+  public String toClassString(Object o) {
+    if (o == null) {
+      return "null";
+    }
+
+    return o.getClass().getName() + ": " + o.toString();
+  }
+
+  public String toUnfinishedCollString(Object o) {
+    if (o instanceof APersistentVector) {
+      return (String) ((APersistentVector) o).stream().map(String::valueOf).collect(Collectors.joining(" ", "[", ""));
+    }
+
+    if (o instanceof APersistentSet) {
+      return (String) ((APersistentSet) o).stream().map(String::valueOf).collect(Collectors.joining(" ", "#{", ""));
+    }
+
+    if (o instanceof APersistentMap) {
+      return (String) ((Map<Object, Object>) o).entrySet().stream().map((Map.Entry e) -> String.valueOf(e.getKey()) + " " + String.valueOf(e.getValue())).collect(Collectors.joining(", ", "{", ""));
+    }
+
+    if (o instanceof List) {
+      return (String) ((List) o).stream().map(String::valueOf).collect(Collectors.joining(" ", "(", ""));
+    }
+
+    throw new RuntimeException("Unknown object type " + toClassString(o));
+  }
+
+  public String context() {
+    String context = reader.context(200);
+    if (context != null) {
+      return ", context:\n" + context;
+    } else {
+      return "";
+    }
   }
 }

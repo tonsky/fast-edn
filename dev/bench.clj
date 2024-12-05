@@ -56,7 +56,7 @@
                  (->> (sort-by File/.getName)))
           :let [content (slurp file)]]
     (duti/benching (File/.getName file)
-      (doseq [[name parse-fn] [["clojure.edn" edn/read-string]
+      (doseq [[name parse-fn] [#_["clojure.edn" edn/read-string]
                                #_["tools.reader" tools/read-string]
                                ["fast-edn" edn2/read-string]]]
         (duti/benching name
@@ -209,9 +209,24 @@
     (gen-keywords 10))
   (bench-edn {:pattern #".*\.edn"}))
 
+;                    53673a3
+;                    -------   -------
+; edn_basic_10         0.115     0.122
+; edn_basic_100        0.548     0.528
+; edn_basic_1000       3.125     3.178
+; edn_basic_10000     40.650    39.409
+; edn_basic_100000   397.643   376.625
+; ints_1400           35.974    30.800
+; keywords_10          0.641     0.639
+; keywords_100         5.720     5.730
+; keywords_1000       66.411    62.685
+; keywords_10000     820.167   807.494
+; strings_1000        43.875    44.212
+; strings_uni_250    120.249   117.282
+
 ; ┌────────────────┬─────────────┬─────────────┬─────────────┬─────────────┐
 ; │ keywords       │          10 │         100 │        1000 │       10000 │
-; │────────────────┼─────────────┼─────────────┼─────────────┼─────────────┤
+; ├────────────────┼─────────────┼─────────────┼─────────────┼─────────────┤
 ; │ clojure.edn    │             │             │  372.045 μs │             │
 ; │ fast-edn       │    0.638 µs │    5.733 µs │   65.429 μs │  802.938 µs │
 ; └────────────────┴─────────────┴─────────────┴─────────────┴─────────────┘

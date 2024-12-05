@@ -107,6 +107,8 @@
 #_(clojure.test/test-ns *ns*)
 
 (comment
+  (type (transient []))
+
   (read-string "#{:zFFV7tvGi6T_xy0-GPrgxXexmWUhMnaIXD2aMPywNpRHw :gpH*H88AZ :QQcE5TW_7r :ZaH9xNOmXatK3kYkF!BnYYJjsP__uJ9jm3vskI4ZbDqJRzXS*vomwvv0_i+ :_AIRkH+*0mYYBO+BN3Ync0Bw2VoXGWO7XA+tCSFVGL?qSP+I6CyiyHMm?PROE2GIJUxv5hxToWYl9a4-xCiDwv*4u :cojX+mE62KGUMowy*lREUMtisD1y-22El9 :VHD31g_lR7id8asf+ktqEAbNt_Jzg :kUVEdWK*!Pk :gkrPX?pxXfNGf2Sa4Ts4kIPssC4xZjGVnA-*XKjqm?NEVS8TcjkQexN!aQNEUy6y0CoTIHl5!!usTiGL58lfcd!T_DUzh84nL!GH6Um_lpQyt*4lUm5KmB4JAFe*lIQKESoH*KjptQLjGhmh7D_pApgaIHIvAa+PFO+HiDBlcWFCKbKlJC!TO1HFkR4LEaLOpdHdRh1Dnj0!e32A5YHqbU-nFVf-*sDYCNc1HuDD89cy!joU9vp0h7GEtiCLVT3hxC-s0P3t :WH-PxBvi-Eaf?O+3QJ!GwMJPVRPqpVqG4pc_e9tbp*JUrlptDwsPbo :gV2!MkUBy3z+GhT_3YzHeHWOL_fTz1CRzq0_gZ :irI4?IXj?3 :zxxOUiTUeuSeng_Dqlq2hHXNOGZ2Jwy9*G_K?6Z :dWTp_rw8*Wn?cqFsLH?YNCoJSrFPNpSm-U3*n7VQK1al2ekJoeJQc :HiLeCgp8DCHN1eZEJk5SVznnkzA?xdoIY?v?q2oLuNp5mQEI8o2JOKGQaMgs!4ZvhUd9LGGrKfgcx8O9z1*FHQBJDIeQbP1P :BSrlKwsT9lGH9ubAnWh-wtzF-?y0214rqOdbOf-jZQDkmvP50qcfZIM3eERjbDmwfQURo0t?YnfLNe_TMb-lak2Sz7iEIM :dJ_HBl-JyKyzw0-LdkhvSiSjK2ofFD4SPK_l+wk*rg536Clzd8Mi6pwC}")
   \u1234
   36r123XYZ
