@@ -68,7 +68,7 @@ public final class EDNReader {
   // readString //
   ////////////////
 
-  public String readSimpleString() {
+  public String readString() {
     char[] buf   = reader.buffer();
     int    start = reader.position();
     int    pos   = start;
@@ -84,7 +84,7 @@ public final class EDNReader {
       }
     }
     reader.position(pos);
-    return readComplexString(buf, start, pos);
+    return readStringComplex(buf, start, pos);
   }
 
   public byte digit16(int ch) {
@@ -145,7 +145,7 @@ public final class EDNReader {
     return (char) value;
   }
 
-  public String readComplexString(char[] buf, int start, int pos) {
+  public String readStringComplex(char[] buf, int start, int pos) {
     accumulatorLength = 0;
     accumulatorAppend(buf, start, pos);
 
@@ -271,12 +271,13 @@ public final class EDNReader {
   // readSymbol //
   ////////////////
   
-  public Object readSimpleSymbol() {
+  public Object readSymbol() {
     char[] buf   = reader.buffer();
     int    start = reader.position();
     int    pos   = start;
     int    len   = buf.length;
     int    slash = -1;
+
     for (; pos < len; ++pos) {
       char ch = buf[pos];
       if (CharReader.isBoundary(ch)) {
@@ -286,11 +287,12 @@ public final class EDNReader {
         slash = pos;
       }
     }
+
     reader.position(pos);
-    return readComplexSymbol(buf, start, slash, pos);
+    return readSymbolComplex(buf, start, slash, pos);
   }
 
-  public Object readComplexSymbol(char[] buf, int start, int slash, int pos) {
+  public Object readSymbolComplex(char[] buf, int start, int slash, int pos) {
     accumulatorLength = 0;
     accumulatorAppend(buf, start, pos);
     if (slash != -1) {
@@ -314,7 +316,7 @@ public final class EDNReader {
           reader.position(pos);
           break outer;
         } else if (ch == '/' && slash == -1) {
-          slash = accumulatorLength + pos;
+          slash = accumulatorLength + pos - start;
         }
       }
 
@@ -328,10 +330,10 @@ public final class EDNReader {
   public Object continueReadingSymbol(char ch) {
     if (reader.position() > 0) {
       reader.position(reader.position() - 1);
-      return readSimpleSymbol();
+      return readSymbol();
     } else {
       accumulator[0] = ch;
-      return readComplexSymbol(accumulator, 0, -1, 1);
+      return readSymbolComplex(accumulator, 0, -1, 1);
     }
   }
 
@@ -376,7 +378,7 @@ public final class EDNReader {
   // readKeyword //
   /////////////////
 
-  public Keyword readSimpleKeyword() {
+  public Keyword readKeyword() {
     char[] buf   = reader.buffer();
     int    start = reader.position();
     int    pos   = start;
@@ -392,10 +394,10 @@ public final class EDNReader {
       }
     }
     reader.position(pos);
-    return readComplexKeyword(buf, start, slash, pos);
+    return readKeywordComplex(buf, start, slash, pos);
   }
 
-  public Keyword readComplexKeyword(char[] buf, int start, int slash, int pos) {
+  public Keyword readKeywordComplex(char[] buf, int start, int slash, int pos) {
     accumulatorLength = 0;
     accumulatorAppend(buf, start, pos);
     if (slash != -1) {
@@ -419,7 +421,7 @@ public final class EDNReader {
           reader.position(pos);
           break outer;
         } else if (ch == '/' && slash == -1) {
-          slash = accumulatorLength + pos;
+          slash = accumulatorLength + pos - start;
         }
       }
 
@@ -456,118 +458,133 @@ public final class EDNReader {
   }
 
 
-  ////////////////////
+  ////////////////
+  // readNumber //
+  ////////////////
 
-  final Number readNumberSimple() throws Exception {
-    char[] buffer   = reader.buffer();
-    int    startpos = reader.position();
-    int    pos      = startpos;
-    int    len      = buffer.length;
-    long   value    = 0;
+  public Number readNumber() {
+    char[] buf   = reader.buffer();
+    int    start = reader.position();
+    int    pos   = start;
+    int    len   = buf.length;
+    long   val   = 0;
 
     for (; pos < len; ++pos) {
-      final char nextChar = buffer[pos];
-      if (nextChar >= '0' && nextChar <= '9') {
-        value = value * 10 + nextChar - '0';
-      } else if (CharReader.isBoundary(nextChar)) {
+      char ch = buf[pos];
+      if (ch >= '0' && ch <= '9') {
+        val = val * 10 + ch - '0';
+      } else if (CharReader.isBoundary(ch)) {
         reader.position(pos);
-        return value;
+        return val;
       } else {
-        return readNumberComplex(buffer, startpos, pos);
+        break;
       }
     }
-    return readNumberComplex(buffer, startpos, pos);
+
+    reader.position(pos);
+    return readNumberComplex(buf, start, pos);
   }
 
-  final Number readNumberComplex(char[] buffer, int startpos, int pos) throws Exception {
-    charBuffer.clear();
-    charBuffer.append(buffer, startpos, pos);
-    startpos = pos;
+  public Number readNumberComplex(char[] buf, int start, int pos) {
+    accumulatorLength = 0;
+    accumulatorAppend(buf, start, pos);
 
     boolean isInt    = false;
     boolean isFloat  = false;
     boolean isRatio  = false;
-    int     len      = buffer.length;
     int     radixPos = -1;
+
     outer:
-    while (buffer != null) {
-      len = buffer.length;
+    while (true) {
+      buf = reader.buffer();
+      if (buf == null) {
+        break;
+      }
+      start = reader.position();
+      pos = start;
+      int len = reader.bufferLength();
+
       for (; pos < len; ++pos) {
-        final char nextChar = buffer[pos];
-        if (nextChar >= '0' && nextChar <= '9') {
+        char ch = buf[pos];
+        if (ch >= '0' && ch <= '9') {
           // pass
-        } else if (CharReader.isBoundary(nextChar)) {
+        } else if (CharReader.isBoundary(ch)) {
+          accumulatorAppend(buf, start, pos);
           reader.position(pos);
           break outer;
-        } else if (!isInt && !isFloat && (nextChar == '.' || nextChar == 'e' || nextChar == 'E' || nextChar == 'M')) {
+        } else if (!isInt && !isFloat && (ch == '.' || ch == 'e' || ch == 'E' || ch == 'M')) {
           isFloat = true;
-        } else if (!isInt && !isFloat && (nextChar == 'x' || nextChar == 'X' || nextChar == 'N')) {
+        } else if (!isInt && !isFloat && (ch == 'x' || ch == 'X' || ch == 'N')) {
           isInt = true;
-        } else if (radixPos == -1 && (nextChar == 'r' || nextChar == 'R')) {
-          radixPos = charBuffer.length() + pos - startpos;
+        } else if (radixPos == -1 && (ch == 'r' || ch == 'R')) {
+          radixPos = accumulatorLength + pos - start;
           isInt = true;
-        } else if (nextChar == '/') {
+        } else if (ch == '/') {
+          accumulatorAppend(buf, start, pos);
           reader.position(pos + 1);
           isRatio = true;
           break outer;
         }
       }
 
-      charBuffer.append(buffer, startpos, pos);
-      buffer = reader.nextBuffer();
-      startpos = 0;
-      pos = 0;
-    }
-
-    charBuffer.append(buffer, startpos, pos);
-
-    Number result;
-    if (isFloat) {
-      result = finalizeFloat(charBuffer.buffer, 0, charBuffer.len);
-    } else {
-      result = finalizeInt(charBuffer.buffer, 0, charBuffer.len, radixPos);
+      accumulatorAppend(buf, start, len);
+      reader.nextBuffer();
     }
 
     if (isRatio) {
-      result = result instanceof BigInt ? Numbers.reduceBigInt((BigInt) result) : result;
-      if (!(result instanceof Long || result instanceof BigInteger)) {
-        throw Util.runtimeException("Nominator in ratio can't be " + result.getClass().getName() + ": " + result + context());
-      }
-      BigInteger numerator = result instanceof Long ? BigInteger.valueOf((Long) result) : (BigInteger) result;
-      
-      result = readNumberSimple();
-      result = result instanceof BigInt ? Numbers.reduceBigInt((BigInt) result) : result;
-      if (!(result instanceof Long || result instanceof BigInteger)) {
-        throw Util.runtimeException("Denominator in ratio can't be " + result.getClass().getName() + ": " + result + context());
-      }
-      BigInteger denominator = result instanceof Long ? BigInteger.valueOf((Long) result) : (BigInteger) result;
-
-      result = Numbers.divide(numerator, denominator);
+      Number numerator = finalizeInt(accumulator, 0, radixPos, accumulatorLength);
+      return finalizeRatio(numerator);
     }
 
-    return result;
+    if (isFloat) {
+      return finalizeFloat(accumulator, 0, accumulatorLength);
+    }
+
+    return finalizeInt(accumulator, 0, radixPos, accumulatorLength);
   }
 
-  final Number finalizeInt(char[] chars, int start, int end, int radixPos) throws Exception {
+  public Number finalizeRatio(Number numerator) {
+    numerator = numerator instanceof BigInt ? Numbers.reduceBigInt((BigInt) numerator) : numerator;
+    if (!(numerator instanceof Long || numerator instanceof BigInteger)) {
+      throw new RuntimeException("Numerator can't be " + numerator.getClass().getName() + ": " + numerator + context());
+    }
+    numerator = numerator instanceof Long ? BigInteger.valueOf((Long) numerator) : (BigInteger) numerator;
+
+    Number denominator = readNumber();
+    denominator = denominator instanceof BigInt ? Numbers.reduceBigInt((BigInt) denominator) : denominator;
+    if (!(denominator instanceof Long || denominator instanceof BigInteger)) {
+      throw new RuntimeException("Denominator can't be " + denominator.getClass().getName() + ": " + denominator + context());
+    }
+    denominator = denominator instanceof Long ? BigInteger.valueOf((Long) denominator) : (BigInteger) denominator;
+
+    return Numbers.divide(numerator, denominator);
+  }
+
+  public Number finalizeFloat(char[] buf, int start, int end) {
+    final int len = end - start;
+    if (buf[end - 1] == 'M') {
+      return new BigDecimal(buf, start, len - 1);
+    } else {
+      return Double.parseDouble(new String(buf, start, len));
+    }
+  }
+
+  public Number finalizeInt(char[] buf, int start, int radixPos, int end) {
     int radix = 10;
     boolean forceBigInt = false;
     
-    if (radixPos >= 0) {
-      radix = (int) Long.parseLong(new CharSeq(chars), start, start + radixPos, 10);
-      start = start + radixPos + 1;
+    if (radixPos != -1) {
+      radix = (int) Long.parseLong(new CharSeq(buf), start, radixPos, 10);
+      start = radixPos + 1;
     }
 
-    if (chars[end - 1] == 'N') {
+    if (buf[end - 1] == 'N') {
       forceBigInt = true;
       end = end - 1;
     }
 
-    if (end == start + 1 && !forceBigInt) {
-      return Long.valueOf(Character.digit(chars[start], radix));
-    }
-
-    if (chars[start] == '0') {
-      if (end - start >= 3 && chars[start + 1] == 'x' || chars[start + 1] == 'X') {
+    if (buf[start] == '0') {
+      if (end - start >= 3 && buf[start + 1] == 'x' || buf[start + 1] == 'X') {
         radix = 16;
         start = start + 2;
       } else if (end - start >= 2) {
@@ -577,28 +594,22 @@ public final class EDNReader {
     }
 
     if (forceBigInt) {
-      final String str = new String(chars, start, end - start);
+      String str = new String(buf, start, end - start);
       BigInteger bn = new BigInteger(str, radix);
       return BigInt.fromBigInteger(bn);
     }
 
     try {
-      return Long.valueOf(Long.parseLong(new CharSeq(chars), start, end, radix));
+      return Long.valueOf(Long.parseLong(new CharSeq(buf), start, end, radix));
     } catch (Exception e) {
-      final String str = new String(chars, start, end - start);
+      String str = new String(buf, start, end - start);
       BigInteger bn = new BigInteger(str, radix);
       return BigInt.fromBigInteger(bn);
     }
   }
 
-  final Number finalizeFloat(char[] chars, int start, int end) throws Exception {
-    final int len = end - start;
-    if (chars[end - 1] == 'M') {
-      return new BigDecimal(chars, start, len - 1);
-    } else {
-      return Double.parseDouble(new String(chars, start, len));
-    }
-  }
+
+  ////////////////////
 
   public final String context() {
     String context = reader.context(200);
@@ -748,9 +759,9 @@ public final class EDNReader {
       int val = reader.eatwhite();
       switch (val) {
       case '"':
-        return readSimpleString();
+        return readString();
       case ':':
-        return readSimpleKeyword();
+        return readKeyword();
       case '{': {
         return readMap(null);
       }
@@ -771,7 +782,7 @@ public final class EDNReader {
         }
         if (CharReader.isDigit(val)) {
           reader.unread();
-          Object res = readNumberSimple();
+          Object res = readNumber();
           if (res instanceof Long) {
             return Long.valueOf(-((Long) res).longValue());
           } else if (res instanceof Double) {
@@ -805,7 +816,7 @@ public final class EDNReader {
         }
         if (CharReader.isDigit(val)) {
           reader.unread();
-          return readNumberSimple();
+          return readNumber();
         } else {
           reader.unread();
           return continueReadingSymbol('+');
@@ -838,7 +849,7 @@ public final class EDNReader {
         }
 
         if (nextChar == ':') {
-          Keyword ns = (Keyword) readSimpleKeyword();
+          Keyword ns = (Keyword) readKeyword();
           if (ns.getNamespace() != null) {
             throw new RuntimeException("Namespaced map should use non-namespaced keyword: :" + ns + context());
           }
@@ -876,10 +887,10 @@ public final class EDNReader {
       default:
         if (CharReader.isNumberChar(val)) {
           reader.unread();
-          return readNumberSimple();
+          return readNumber();
         } else if (!CharReader.isBoundary(val)) {
           reader.unread();
-          return readSimpleSymbol();
+          return readSymbol();
         }
         throw new Exception("Parse error - Unexpected character - " + val);
       }
