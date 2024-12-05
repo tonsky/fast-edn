@@ -95,6 +95,7 @@
     "sym123"        'sym123
     "/"             '/
     "ns/sym"        'ns/sym
+    " ns/sym "      'ns/sym
     "[a/b c/d]"     '[a/b c/d]
     "абв"           'абв
     
@@ -133,6 +134,7 @@
     ":.sym"          :.sym
     ":sym123"        :sym123
     ":ns/sym"        :ns/sym
+    " :ns/sym "      :ns/sym
     ":абв"           :абв
     
     ;; not in spec

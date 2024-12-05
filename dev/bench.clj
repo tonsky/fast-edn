@@ -56,7 +56,7 @@
                  (->> (sort-by File/.getName)))
           :let [content (slurp file)]]
     (duti/benching (File/.getName file)
-      (doseq [[name parse-fn] [#_["clojure.edn" edn/read-string]
+      (doseq [[name parse-fn] [["clojure.edn" edn/read-string]
                                #_["tools.reader" tools/read-string]
                                ["fast-edn" edn2/read-string]]]
         (duti/benching name
@@ -162,7 +162,9 @@
     (duti.core/bench (fast-edn.core/read-string strings-250))
     (duti.core/bench (fast-edn.core/read-string strings-1000)))
 
+  (duti.core/bench (clojure.edn/read-string strings-1000))
   (duti.core/bench (clojure.edn/read-string strings-250))
+
   (duti.core/long-bench (fast-edn.core/read-string strings-250))
   (duti.core/long-bench (fast-edn.core/read-string s1000))
 

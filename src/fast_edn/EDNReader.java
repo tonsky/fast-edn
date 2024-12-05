@@ -83,6 +83,7 @@ public final class EDNReader {
         break;
       }
     }
+    reader.position(pos);
     return readComplexString(buf, start, pos);
   }
 
@@ -147,7 +148,6 @@ public final class EDNReader {
   public String readComplexString(char[] buf, int start, int pos) {
     accumulatorLength = 0;
     accumulatorAppend(buf, start, pos);
-    reader.position(pos);
 
     outer:
     while (true) {
@@ -160,7 +160,7 @@ public final class EDNReader {
       int len = reader.bufferLength();
 
       for (; pos < len; ++pos) {
-        final char ch = buf[pos];
+        char ch = buf[pos];
 
         if (ch == '\\') {
           accumulatorAppend(buf, start, pos);
@@ -271,99 +271,192 @@ public final class EDNReader {
   // readSymbol //
   ////////////////
   
-  final Object readSymbol(int firstChar, boolean forKeyword) throws Exception {
-    boolean usedBuffer = false;
-    char[]  buffer     = reader.buffer();
-    int     startpos   = reader.position();
-    int     pos        = startpos;
-    int     len        = buffer.length;
-    int     slashPos   = -1;
+  public Object readSimpleSymbol() {
+    char[] buf   = reader.buffer();
+    int    start = reader.position();
+    int    pos   = start;
+    int    len   = buf.length;
+    int    slash = -1;
+    for (; pos < len; ++pos) {
+      char ch = buf[pos];
+      if (CharReader.isBoundary(ch)) {
+        reader.position(pos);
+        return finalizeSymbol(buf, start, slash, pos);
+      } else if (ch == '/' && slash == -1) {
+        slash = pos;
+      }
+    }
+    reader.position(pos);
+    return readComplexSymbol(buf, start, slash, pos);
+  }
 
-    if (firstChar >= 0) {
-      charBuffer.clear();
-      charBuffer.append((char) firstChar);
-      usedBuffer = true;
+  public Object readComplexSymbol(char[] buf, int start, int slash, int pos) {
+    accumulatorLength = 0;
+    accumulatorAppend(buf, start, pos);
+    if (slash != -1) {
+      slash = slash - start;
     }
 
     outer:
-    while (buffer != null) {
-      startpos = reader.position();
-      pos      = startpos;
-      len      = buffer.length;
+    while (true) {
+      buf = reader.buffer();
+      if (buf == null) {
+        break;
+      }
+      start = reader.position();
+      pos = start;
+      int len = reader.bufferLength();
 
       for (; pos < len; ++pos) {
-        final char nextChar = buffer[pos];
-        if (slashPos == -1 && '/' == nextChar) {
-          slashPos = (usedBuffer ? charBuffer.length() : 0) + pos - startpos;
-        } else if (CharReader.isBoundary(nextChar)) {
+        char ch = buf[pos];
+        if (CharReader.isBoundary(ch)) {
+          accumulatorAppend(buf, start, pos);
           reader.position(pos);
           break outer;
+        } else if (ch == '/' && slash == -1) {
+          slash = accumulatorLength + pos;
         }
       }
-      
-      if (!usedBuffer) {
-        usedBuffer = true;
-        charBuffer.clear();
-      }
-      
-      charBuffer.append(buffer, startpos, pos);
-      buffer = reader.nextBuffer();
+
+      accumulatorAppend(buf, start, len);
+      reader.nextBuffer();
     }
 
-    char[] chars;
-    int start, end;
-    if (usedBuffer) {
-      if (buffer != null && pos > startpos) {
-        charBuffer.append(buffer, startpos, pos);
-      }
-      chars = charBuffer.buffer;
-      start = 0;
-      end = charBuffer.len;
+    return finalizeSymbol(accumulator, 0, slash, accumulatorLength);
+  }
+
+  public Object continueReadingSymbol(char ch) {
+    if (reader.position() > 0) {
+      reader.position(reader.position() - 1);
+      return readSimpleSymbol();
     } else {
-      chars = buffer;
-      start = startpos;
-      end = pos;
+      accumulator[0] = ch;
+      return readComplexSymbol(accumulator, 0, -1, 1);
     }
+  }
 
+  public Object finalizeSymbol(char[] buf, int start, int slash, int end) {
     if (end == start) {
-      throw Util.runtimeException("Empty " + (forKeyword ? "keyword" : "symbol") + "? How peculiar!");
+      throw new RuntimeException("Symbol can't be empty" + context());
     }
 
-    if (1 == end - start && chars[start] == '/') {
+    if (1 == end - start && buf[start] == '/') {
       return Symbol.intern(null, "/");
     }
 
-    if (!forKeyword && 3 == end - start && chars[start] == 'n' && chars[start + 1] == 'i' && chars[start + 2] == 'l') {
+    if (3 == end - start && buf[start] == 'n' && buf[start + 1] == 'i' && buf[start + 2] == 'l') {
       return null;
     }
 
-    if (!forKeyword && 4 == end - start && chars[start] == 't' && chars[start + 1] == 'r' && chars[start + 2] == 'u' && chars[start + 3] == 'e') {
+    if (4 == end - start && buf[start] == 't' && buf[start + 1] == 'r' && buf[start + 2] == 'u' && buf[start + 3] == 'e') {
       return Boolean.TRUE;
     }
 
-    if (!forKeyword && 5 == end - start && chars[start] == 'f' && chars[start + 1] == 'a' && chars[start + 2] == 'l' && chars[start + 3] == 's' && chars[start + 4] == 'e') {
+    if (5 == end - start && buf[start] == 'f' && buf[start + 1] == 'a' && buf[start + 2] == 'l' && buf[start + 3] == 's' && buf[start + 4] == 'e') {
       return Boolean.FALSE;
     }
 
-    if (slashPos == -1) {
-      return Symbol.intern(null, new String(chars, start, end - start));
+    if (slash == -1) {
+      return Symbol.intern(null, new String(buf, start, end - start));
     }
 
-    if (slashPos == 0) {
-      throw Util.runtimeException((forKeyword ? "Keyword" : "Symbol") + " namespace can't be empty: " + new String(chars, start, end - start));
+    if (slash == start) {
+      throw new RuntimeException("Symbol's namespace can't be empty: " + new String(buf, start, end - start) + context());
     }
 
-    if (slashPos == end - start - 1) {
-      throw Util.runtimeException((forKeyword ? "Keyword" : "Symbol") + " name can't be empty: " + new String(chars, start, end - start));
+    if (slash == end - 1) {
+      throw new RuntimeException("Symbol's name can't be empty: " + new String(buf, start, end - start) + context());
     }
 
-    return Symbol.intern(new String(chars, start, slashPos),
-                         new String(chars, start + slashPos + 1, end - (start + slashPos + 1)));
+    return Symbol.intern(new String(buf, start, slash - start),
+                         new String(buf, slash + 1, end - (slash + 1)));
   }
 
-  final Object readKeyword() throws Exception {
-    return Keyword.intern((Symbol) readSymbol(-1, true));
+  /////////////////
+  // readKeyword //
+  /////////////////
+
+  public Keyword readSimpleKeyword() {
+    char[] buf   = reader.buffer();
+    int    start = reader.position();
+    int    pos   = start;
+    int    len   = buf.length;
+    int    slash = -1;
+    for (; pos < len; ++pos) {
+      char ch = buf[pos];
+      if (CharReader.isBoundary(ch)) {
+        reader.position(pos);
+        return finalizeKeyword(buf, start, slash, pos);
+      } else if (ch == '/' && slash == -1) {
+        slash = pos;
+      }
+    }
+    reader.position(pos);
+    return readComplexKeyword(buf, start, slash, pos);
   }
+
+  public Keyword readComplexKeyword(char[] buf, int start, int slash, int pos) {
+    accumulatorLength = 0;
+    accumulatorAppend(buf, start, pos);
+    if (slash != -1) {
+      slash = slash - start;
+    }
+
+    outer:
+    while (true) {
+      buf = reader.buffer();
+      if (buf == null) {
+        break;
+      }
+      start = reader.position();
+      pos = start;
+      int len = reader.bufferLength();
+
+      for (; pos < len; ++pos) {
+        char ch = buf[pos];
+        if (CharReader.isBoundary(ch)) {
+          accumulatorAppend(buf, start, pos);
+          reader.position(pos);
+          break outer;
+        } else if (ch == '/' && slash == -1) {
+          slash = accumulatorLength + pos;
+        }
+      }
+
+      accumulatorAppend(buf, start, len);
+      reader.nextBuffer();
+    }
+
+    return finalizeKeyword(accumulator, 0, slash, accumulatorLength);
+  }
+
+  public Keyword finalizeKeyword(char[] buf, int start, int slash, int end) {
+    if (end == start) {
+      throw new RuntimeException("Keyword can't be empty" + context());
+    }
+
+    if (1 == end - start && buf[start] == '/') {
+      return Keyword.intern(Symbol.intern(null, "/"));
+    }
+
+    if (slash == -1) {
+      return Keyword.intern(Symbol.intern(null, new String(buf, start, end - start)));
+    }
+
+    if (slash == start) {
+      throw new RuntimeException("Keyword's namespace can't be empty: " + new String(buf, start, end - start) + context());
+    }
+
+    if (slash == end - 1) {
+      throw new RuntimeException("Keyword's name can't be empty: " + new String(buf, start, end - start) + context());
+    }
+
+    return Keyword.intern(Symbol.intern(new String(buf, start, slash - start),
+                                        new String(buf, slash + 1, end - (slash + 1))));
+  }
+
+
+  ////////////////////
 
   final Number readNumberSimple() throws Exception {
     char[] buffer   = reader.buffer();
@@ -378,7 +471,6 @@ public final class EDNReader {
         value = value * 10 + nextChar - '0';
       } else if (CharReader.isBoundary(nextChar)) {
         reader.position(pos);
-        // return Long.parseLong(new CharSeq(buffer), startpos, pos, 10);
         return value;
       } else {
         return readNumberComplex(buffer, startpos, pos);
@@ -658,7 +750,7 @@ public final class EDNReader {
       case '"':
         return readSimpleString();
       case ':':
-        return readKeyword();
+        return readSimpleKeyword();
       case '{': {
         return readMap(null);
       }
@@ -697,7 +789,7 @@ public final class EDNReader {
           }
         } else {
           reader.unread();
-          return readSymbol('-', false);
+          return continueReadingSymbol('-');
         }
       }
       case '^': {
@@ -716,7 +808,7 @@ public final class EDNReader {
           return readNumberSimple();
         } else {
           reader.unread();
-          return readSymbol('+', false);
+          return continueReadingSymbol('+');
         }
       }
       case '#': {
@@ -746,13 +838,13 @@ public final class EDNReader {
         }
 
         if (nextChar == ':') {
-          Symbol ns = (Symbol) readSymbol(-1, true);
+          Keyword ns = (Keyword) readSimpleKeyword();
           if (ns.getNamespace() != null) {
-            throw Util.runtimeException("Namespaced map should use non-namespaced keyword: :" + ns + context());
+            throw new RuntimeException("Namespaced map should use non-namespaced keyword: :" + ns + context());
           }
           val = reader.eatwhite();
           if (val != '{') {
-            throw Util.runtimeException("Namespaced map must specify a map: " + context());
+            throw new RuntimeException("Namespaced map must specify a map: " + context());
           }
           return readMap(ns.getName());
         }
@@ -787,7 +879,7 @@ public final class EDNReader {
           return readNumberSimple();
         } else if (!CharReader.isBoundary(val)) {
           reader.unread();
-          return readSymbol(-1, false);
+          return readSimpleSymbol();
         }
         throw new Exception("Parse error - Unexpected character - " + val);
       }
