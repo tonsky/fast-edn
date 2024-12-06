@@ -4,36 +4,150 @@ import clojure.lang.*;
 import java.io.*;
 import java.math.*;
 import java.util.*;
+import java.util.function.*;
 import java.util.stream.*;
 
 @SuppressWarnings("unchecked")
 public class EDNReader {
-  public CharReader reader;
-  public final boolean throwOnEOF;
-  public final Object eofValue;
-  public final ILookup dataReaders;
-  public final IFn defaultDataReader;
   public final static Keyword TAG_KEY = Keyword.intern(null, "tag");
   public final static Keyword PARAM_TAGS_KEY = Keyword.intern(null, "param-tags");
 
-  public EDNReader(ILookup dataReaders, IFn defaultDataReader, boolean throwOnEOF, Object eofValue) {
+  public final Reader  reader;
+  public final ILookup dataReaders;
+  public final IFn     defaultDataReader;
+  public final boolean throwOnEOF;
+  public final Object  eofValue;
+
+  public final char[]  readBuf;
+  public       int     readPos;
+  public       int     readLen;
+  public       char[]  accumulator;
+  public       int     accumulatorLength;
+
+  public EDNReader(Reader reader, int bufferSize, ILookup dataReaders, IFn defaultDataReader, boolean throwOnEOF, Object eofValue) {
+    this.reader = reader;
     this.dataReaders = dataReaders;
     this.defaultDataReader = defaultDataReader;
     this.throwOnEOF = throwOnEOF;
     this.eofValue = eofValue;
+
+    this.readBuf = new char[bufferSize];
+    this.readPos = 0;
+    this.readLen = 0;
+    this.accumulator = new char[32];
+    this.accumulatorLength = 0;
   }
 
-  public void beginParse(CharReader rdr) {
-    reader = rdr;
+
+  ////////////
+  // Reader //
+  ////////////
+
+  public void nextBuffer() {
+    if (readLen != -1) {
+      try {
+        readLen = reader.read(readBuf, 0, readBuf.length);
+        if (readLen >= 0) {
+          readPos = 0;
+        }
+      } catch (IOException e) {
+        Util.sneakyThrow(e);
+      }
+    }
+  }
+
+  public int read() {
+    if (readLen > readPos) {
+      return readBuf[readPos++];
+    }
+    nextBuffer();
+    return readLen == -1 ? -1 : readBuf[readPos++];
+  }
+
+  public void unread() {
+    assert readPos > 0;
+    readPos -= 1;
+  }
+
+  public boolean eof() {
+    return readLen == -1;
+  }
+
+  public int skip(IntPredicate pred) {
+    while (true) {
+      if (eof()) {
+        return -1;
+      } 
+      char[] buf = readBuf;
+      int pos = readPos;
+      int len = readLen;
+      for (; pos < len; ++pos) {
+        int ch = buf[pos];
+        if (!pred.test(ch)) {
+          readPos = pos + 1;
+          return ch;
+        }
+      }
+      nextBuffer();
+    }
+  }
+
+  public int skipWhitespace() {
+    return skip(EDNReader::isWhitespace);
+  }
+
+  public boolean compareNext(int ch, String s) {
+    if ((char) ch != s.charAt(0)) {
+      return false;
+    }
+
+    for (int i = 1; i < s.length(); ++i) {
+      ch = read();
+      if (ch == -1) {
+        throw new RuntimeException("EOF while reading" + context());
+      }
+      if ((char) ch != s.charAt(i)) {
+        return false;
+      }
+    }
+    return true;
+  }
+  
+  public String context() {
+    int len = readLen == -1 ? readPos : readLen; 
+    if (len <= 0) {
+      return "";
+    }
+
+    int start = readPos;
+    for (; start > Math.max(0, readPos - 100); --start) {
+      int ch = readBuf[start];
+      if (ch == '\n' || ch == '\r') {
+        start = Math.min(start + 1, readPos);
+        break;
+      }
+    }
+
+    int end = readPos;
+    for (; end < Math.min(len, readPos + 100); ++end) {
+      int ch = readBuf[end];
+      if (ch == '\n' || ch == '\r') {
+        end = Math.max(end - 1, readPos);
+        break;
+      }
+    }
+
+    if (end == start) {
+      return "";
+    }
+
+    return ", context:\n" + new String(readBuf, start, end - start) + "\n" + " ".repeat(readPos - start - 1) + "^";
   }
 
 
   /////////////////
   // Accumulator //
   /////////////////
-
-  public char[] accumulator = new char[32];
-  public int accumulatorLength = 0;
 
   public void accumulatorEnsureCapacity(int len) {
     if (len > accumulator.length) {
@@ -58,10 +172,6 @@ public class EDNReader {
     }
   }
 
-  public CharSeq accumulatorToCharSeq() {
-    return new CharSeq(accumulator, 0, accumulatorLength);
-  }
-
   public String accumulatorToString() {
     return new String(accumulator, 0, accumulatorLength);
   }
@@ -72,21 +182,21 @@ public class EDNReader {
   ////////////////
 
   public String readString() {
-    char[] buf   = reader.buffer();
-    int    start = reader.position();
+    char[] buf   = readBuf;
+    int    start = readPos;
     int    pos   = start;
-    int    len   = buf.length;
+    int    len   = readLen;
     for (; pos < len; ++pos) {
       char ch = buf[pos];
       if (ch == '"') {
-        reader.position(pos + 1);
+        readPos = pos + 1;
         return new String(buf, start, pos - start);
       }
       if (ch == '\\') {
         break;
       }
     }
-    reader.position(pos);
+    readPos = pos;
     return readStringComplex(buf, start, pos);
   }
 
@@ -107,42 +217,42 @@ public class EDNReader {
       throw new RuntimeException("EOF while reading" + context());
     }
 
-    throw new RuntimeException("Unexpected digit: " + ch + context());
+    throw new RuntimeException("Unexpected digit: " + ((char) ch) + context());
   }
 
   public char readUnicodeChar() {
-    char[] buf = reader.buffer();
-    int pos = reader.position();
-    if (pos + 4 < reader.bufferLength()) {
+    char[] buf = readBuf;
+    int pos = readPos;
+    if (pos + 4 < readLen) {
       int ch = (digit16(buf[pos    ]) << 12)
              + (digit16(buf[pos + 1]) << 8)
              + (digit16(buf[pos + 2]) << 4)
              +  digit16(buf[pos + 3]);
-      reader.position(pos + 4);
+      readPos = pos + 4;
       return (char) ch;
     }
 
-    int ch = (digit16(reader.read()) << 12)
-           + (digit16(reader.read()) << 8)
-           + (digit16(reader.read()) << 4)
-           +  digit16(reader.read());
+    int ch = (digit16(read()) << 12)
+           + (digit16(read()) << 8)
+           + (digit16(read()) << 4)
+           +  digit16(read());
     return (char) ch;
   }
 
   public char readOctalChar() {
     int value = 0;
     for (int i = 0; i < 3; ++i) {
-      int ch = reader.read();
+      int ch = read();
       if (ch >= '0' && ch <= '7') {
         value = (value << 3) + (ch - '0');
       } else {
-        reader.unread();
+        unread();
         break;
       }
     }
 
     if (value > 0377) {
-      throw new RuntimeException("Octal escape sequence must be in range [0, 377], got: " + value + context());
+      throw new RuntimeException("Octal escape sequence must be in range [0, 377], got: " + Integer.toString(value, 8) + context());
     }
     
     return (char) value;
@@ -153,21 +263,19 @@ public class EDNReader {
     accumulatorAppend(buf, start, pos);
 
     outer:
-    while (true) {
-      buf = reader.buffer();
-      if (buf == null) {
-        throw new RuntimeException("EOF while reading string: " + accumulatorToString() + context());
-      }
-      start = reader.position();
-      pos = start;
-      int len = reader.bufferLength();
+    while (!eof()) {
+      buf     = readBuf;
+      start   = readPos;
+      pos     = start;
+      int len = readLen;
 
       for (; pos < len; ++pos) {
         char ch1 = buf[pos];
 
         if (ch1 == '\\') {
           accumulatorAppend(buf, start, pos);
-          int ch2 = reader.readFrom(pos + 1);
+          readPos = pos + 1;
+          int ch2 = read();
 
           if (ch2 == '"') {
             accumulatorAppend('"');
@@ -182,7 +290,7 @@ public class EDNReader {
           } else if (ch2 == 't') {
             accumulatorAppend('\t');
           } else if (ch2 >= '0' && ch2 <= '7') {
-            reader.unread();
+            unread();
             accumulatorAppend(readOctalChar());
           } else if (ch2 == 'b') {
             accumulatorAppend('\b');
@@ -196,15 +304,17 @@ public class EDNReader {
 
           continue outer;
         } else if (ch1 == '"') {
-          reader.position(pos + 1);
+          readPos = pos + 1;
           accumulatorAppend(buf, start, pos);
           return accumulatorToString();
         }
       }
 
       accumulatorAppend(buf, start, len);
-      reader.nextBuffer();
+      nextBuffer();
     }
+
+    throw new RuntimeException("EOF while reading string: \"" + accumulatorToString() + context());
   }
 
 
@@ -212,34 +322,17 @@ public class EDNReader {
   // readCharacter //
   ///////////////////
 
-  public boolean compareNext(int ch, String s) {
-    if ((char) ch != s.charAt(0)) {
-      return false;
-    }
-
-    for (int i = 1; i < s.length(); ++i) {
-      ch = reader.read();
-      if (ch == -1) {
-        throw new RuntimeException("EOF while reading" + context());
-      }
-      if ((char) ch != s.charAt(i)) {
-        return false;
-      }
-    }
-    return true;
-  }
-  
   public Character readCharacter() {
-    int ch = reader.read();
+    int ch = read();
     
     if (-1 == ch) {
       throw new RuntimeException("EOF while reading character" + context());
     }
 
-    int peek = reader.read();
-    reader.unread();
+    int peek = read();
+    unread();
 
-    if (peek == -1 || CharReader.isBoundary(peek)) {
+    if (peek == -1 || isBoundary(peek)) {
       return (char) ch;
     }
 
@@ -275,23 +368,23 @@ public class EDNReader {
   ////////////////
   
   public Object readSymbol() {
-    char[] buf   = reader.buffer();
-    int    start = reader.position();
+    char[] buf   = readBuf;
+    int    start = readPos;
     int    pos   = start;
-    int    len   = buf.length;
+    int    len   = readLen;
     int    slash = -1;
 
     for (; pos < len; ++pos) {
       char ch = buf[pos];
-      if (CharReader.isBoundary(ch)) {
-        reader.position(pos);
+      if (isBoundary(ch)) {
+        readPos = pos;
         return finalizeSymbol(buf, start, slash, pos);
       } else if (ch == '/' && slash == -1) {
         slash = pos;
       }
     }
 
-    reader.position(pos);
+    readPos = pos;
     return readSymbolComplex(buf, start, slash, pos);
   }
 
@@ -303,20 +396,17 @@ public class EDNReader {
     }
 
     outer:
-    while (true) {
-      buf = reader.buffer();
-      if (buf == null) {
-        break;
-      }
-      start = reader.position();
-      pos = start;
-      int len = reader.bufferLength();
+    while (!eof()) {
+      buf     = readBuf;
+      start   = readPos;
+      pos     = start;
+      int len = readLen;
 
       for (; pos < len; ++pos) {
         char ch = buf[pos];
-        if (CharReader.isBoundary(ch)) {
+        if (isBoundary(ch)) {
           accumulatorAppend(buf, start, pos);
-          reader.position(pos);
+          readPos = pos;
           break outer;
         } else if (ch == '/' && slash == -1) {
           slash = accumulatorLength + pos - start;
@@ -324,15 +414,15 @@ public class EDNReader {
       }
 
       accumulatorAppend(buf, start, len);
-      reader.nextBuffer();
+      nextBuffer();
     }
 
     return finalizeSymbol(accumulator, 0, slash, accumulatorLength);
   }
 
   public Object continueReadingSymbol(char ch) {
-    if (reader.position() > 0) {
-      reader.position(reader.position() - 1);
+    if (readPos > 0) {
+      readPos = readPos - 1;
       return readSymbol();
     } else {
       accumulator[0] = ch;
@@ -405,21 +495,21 @@ public class EDNReader {
   /////////////////
 
   public Keyword readKeyword() {
-    char[] buf   = reader.buffer();
-    int    start = reader.position();
+    char[] buf   = readBuf;
+    int    start = readPos;
     int    pos   = start;
-    int    len   = buf.length;
+    int    len   = readLen;
     int    slash = -1;
     for (; pos < len; ++pos) {
       char ch = buf[pos];
-      if (CharReader.isBoundary(ch)) {
-        reader.position(pos);
+      if (isBoundary(ch)) {
+        readPos = pos;
         return finalizeKeyword(buf, start, slash, pos);
       } else if (ch == '/' && slash == -1) {
         slash = pos;
       }
     }
-    reader.position(pos);
+    readPos = pos;
     return readKeywordComplex(buf, start, slash, pos);
   }
 
@@ -431,20 +521,17 @@ public class EDNReader {
     }
 
     outer:
-    while (true) {
-      buf = reader.buffer();
-      if (buf == null) {
-        break;
-      }
-      start = reader.position();
-      pos = start;
-      int len = reader.bufferLength();
+    while (!eof()) {
+      buf     = readBuf;
+      start   = readPos;
+      pos     = start;
+      int len = readLen;
 
       for (; pos < len; ++pos) {
         char ch = buf[pos];
-        if (CharReader.isBoundary(ch)) {
+        if (isBoundary(ch)) {
           accumulatorAppend(buf, start, pos);
-          reader.position(pos);
+          readPos = pos;
           break outer;
         } else if (ch == '/' && slash == -1) {
           slash = accumulatorLength + pos - start;
@@ -452,7 +539,7 @@ public class EDNReader {
       }
 
       accumulatorAppend(buf, start, len);
-      reader.nextBuffer();
+      nextBuffer();
     }
 
     return finalizeKeyword(accumulator, 0, slash, accumulatorLength);
@@ -489,25 +576,25 @@ public class EDNReader {
   ////////////////
 
   public Number readNumber() {
-    char[] buf   = reader.buffer();
-    int    start = reader.position();
+    char[] buf   = readBuf;
+    int    start = readPos;
     int    pos   = start;
-    int    len   = buf.length;
+    int    len   = readLen;
     long   val   = 0;
 
     for (; pos < len; ++pos) {
       char ch = buf[pos];
       if (ch >= '0' && ch <= '9') {
         val = val * 10 + ch - '0';
-      } else if (CharReader.isBoundary(ch)) {
-        reader.position(pos);
+      } else if (isBoundary(ch)) {
+        readPos = pos;
         return val;
       } else {
         break;
       }
     }
 
-    reader.position(pos);
+    readPos = pos;
     return readNumberComplex(buf, start, pos);
   }
 
@@ -521,22 +608,19 @@ public class EDNReader {
     int     radixPos = -1;
 
     outer:
-    while (true) {
-      buf = reader.buffer();
-      if (buf == null) {
-        break;
-      }
-      start = reader.position();
-      pos = start;
-      int len = reader.bufferLength();
+    while (!eof()) {
+      buf     = readBuf;
+      start   = readPos;
+      pos     = start;
+      int len = readLen;
 
       for (; pos < len; ++pos) {
         char ch = buf[pos];
         if (ch >= '0' && ch <= '9') {
           // pass
-        } else if (CharReader.isBoundary(ch)) {
+        } else if (isBoundary(ch)) {
           accumulatorAppend(buf, start, pos);
-          reader.position(pos);
+          readPos = pos;
           break outer;
         } else if (!isInt && !isFloat && (ch == '.' || ch == 'e' || ch == 'E' || ch == 'M')) {
           isFloat = true;
@@ -547,14 +631,14 @@ public class EDNReader {
           isInt = true;
         } else if (ch == '/') {
           accumulatorAppend(buf, start, pos);
-          reader.position(pos + 1);
+          readPos = pos + 1;
           isRatio = true;
           break outer;
         }
       }
 
       accumulatorAppend(buf, start, len);
-      reader.nextBuffer();
+      nextBuffer();
     }
 
     if (isRatio) {
@@ -600,7 +684,7 @@ public class EDNReader {
     boolean forceBigInt = false;
     
     if (radixPos != -1) {
-      radix = (int) Long.parseLong(new CharSeq(buf), start, radixPos, 10);
+      radix = (int) Long.parseLong(new String(buf, start, radixPos - start), 10);
       start = radixPos + 1;
     }
 
@@ -626,7 +710,7 @@ public class EDNReader {
     }
 
     try {
-      return Long.valueOf(Long.parseLong(new CharSeq(buf), start, end, radix));
+      return Long.valueOf(Long.parseLong(new String(buf, start, end - start), radix));
     } catch (Exception e) {
       String str = new String(buf, start, end - start);
       BigInteger bn = new BigInteger(str, radix);
@@ -654,7 +738,7 @@ public class EDNReader {
   }
 
   public Double readSymbolicValue() {
-    int ch = reader.read();
+    int ch = read();
     if (compareNext(ch, "Inf")) {
       return Double.POSITIVE_INFINITY;
     } else if (compareNext(ch, "-Inf")) {
@@ -674,8 +758,8 @@ public class EDNReader {
   public IPersistentList readList() {
     ArrayList acc = new ArrayList();
 
-    while (!reader.eof()) {
-      int ch = reader.eatwhite();
+    while (!eof()) {
+      int ch = skipWhitespace();
 
       if (ch == ')') {
         IPersistentList res = PersistentList.EMPTY;
@@ -686,7 +770,7 @@ public class EDNReader {
       } else if (ch == -1) {
         break;
       } else {
-        reader.unread();
+        unread();
         acc.add(readObject());
       }
     }
@@ -702,15 +786,15 @@ public class EDNReader {
   public PersistentVector readVector() {
     ITransientCollection acc = PersistentVector.EMPTY.asTransient();
 
-    while (!reader.eof()) {
-      int ch = reader.eatwhite();
+    while (!eof()) {
+      int ch = skipWhitespace();
 
       if (ch == ']') {
         return (PersistentVector) acc.persistent();
       } else if (ch == -1) {
         break;
       } else {
-        reader.unread();
+        unread();
         acc = acc.conj(readObject());
       }
     }
@@ -727,15 +811,15 @@ public class EDNReader {
     ATransientSet acc = (ATransientSet) PersistentHashSet.EMPTY.asTransient();
     int count = 0;
 
-    while (!reader.eof()) {
-      int ch = reader.eatwhite();
+    while (!eof()) {
+      int ch = skipWhitespace();
 
       if (ch == '}') {
         return (PersistentHashSet) acc.persistent();
       } else if (ch == -1) {
         break;
       } else {
-        reader.unread();
+        unread();
         Object key = readObject();
         acc = (ATransientSet) acc.conj(key);
         if (count + 1 != acc.count()) {
@@ -757,15 +841,15 @@ public class EDNReader {
     ATransientMap acc = (ATransientMap) PersistentArrayMap.EMPTY.asTransient();
     int count = 0;
 
-    while (!reader.eof()) {
-      int ch = reader.eatwhite();
+    while (!eof()) {
+      int ch = skipWhitespace();
 
       if (ch == '}') {
         return acc.persistent();
       } else if (ch == -1) {
         break;
       } else {
-        reader.unread();
+        unread();
         Object key = readObject();
         if (ns != null) {
           if (key instanceof Keyword) {
@@ -785,12 +869,12 @@ public class EDNReader {
           }
         }
 
-        ch = reader.eatwhite();
+        ch = skipWhitespace();
         if (ch == '}') {
           throw new RuntimeException("Map literal must contain an even number of forms: " + toUnfinishedCollString(acc.persistent()) + context());
         }
 
-        reader.unread();
+        unread();
         Object val = readObject();
         acc = (ATransientMap) acc.assoc(key, val);
         if (count + 1 != acc.count()) {
@@ -852,7 +936,7 @@ public class EDNReader {
     }
 
     while (true) {
-      int ch1 = reader.eatwhite();
+      int ch1 = skipWhitespace();
 
       switch (ch1) {
         case '"': {
@@ -876,20 +960,20 @@ public class EDNReader {
         }
 
         case ';': {
-          reader.eat(ch -> '\n' != ch && '\r' != ch);
+          skip(ch -> '\n' != ch && '\r' != ch);
           continue;
         }
 
         case '-': {
-          int ch2 = reader.read();
+          int ch2 = read();
 
-          if (-1 == ch2 || CharReader.isBoundary(ch2)) {
+          if (-1 == ch2 || isBoundary(ch2)) {
             return Symbol.intern(null, "-");
-          } else if (CharReader.isDigit(ch2)) {
-            reader.unread();
+          } else if ('0' <= ch2 && ch2 <= '9') {
+            unread();
             return readNumberNegative();
           } else {
-            reader.unread();
+            unread();
             return continueReadingSymbol('-');
           }
         }
@@ -903,21 +987,21 @@ public class EDNReader {
         }
 
         case '+': {
-          int ch2 = reader.read();
+          int ch2 = read();
 
-          if (-1 == ch2 || CharReader.isBoundary(ch2)) {
+          if (-1 == ch2 || isBoundary(ch2)) {
             return Symbol.intern(null, "+");
-          } else if (CharReader.isDigit(ch2)) {
-            reader.unread();
+          } else if ('0' <= ch2 && ch2 <= '9') {
+            unread();
             return readNumber();
           } else {
-            reader.unread();
+            unread();
             return continueReadingSymbol('+');
           }
         }
 
         case '#': {
-          int ch2 = reader.read();
+          int ch2 = read();
 
           if (ch2 == -1) {
             throw new RuntimeException("EOF while reading dispatch macro" + context());
@@ -943,7 +1027,7 @@ public class EDNReader {
               throw new RuntimeException("Namespaced map should use non-namespaced keyword: " + ns + context());
             }
 
-            int ch3 = reader.eatwhite();
+            int ch3 = skipWhitespace();
             if (ch3 != '{') {
               throw new RuntimeException("Namespaced map must specify a map: " + ns + context());
             }
@@ -951,7 +1035,7 @@ public class EDNReader {
             return readMap(ns.getName());
           }
 
-          reader.unread();
+          unread();
           return readTagged();
         }
 
@@ -964,26 +1048,37 @@ public class EDNReader {
         }
 
         default: {
-          if (CharReader.isNumberChar(ch1)) {
-            reader.unread();
+          if ('0' <= ch1 && ch1 <= '9') {
+            unread();
             return readNumber();
-          } else if (!CharReader.isBoundary(ch1)) {
-            reader.unread();
+          } else if (!isBoundary(ch1)) {
+            unread();
             return readSymbol();
           }
 
-          throw new RuntimeException("Unexpected character: " + ch1 + context());
+          throw new RuntimeException("Unexpected character: " + ((char) ch1) + context());
         }
       }
     }
   }
 
 
-  /////////////
-  // context //
-  /////////////
+  //////////
+  // Misc //
+  //////////
 
-  public String toClassString(Object o) {
+  public static boolean isWhitespace(int ch) {
+    if (ch >= '\u0021' && ch <= '\u002B') return false;
+    if (ch >= '\u002D' && ch < '\u2000') return false;
+    if (ch == ' ' || ch == '\n' || ch == ',' || ch == '\t' || ch == '\r') return true;
+    return Character.isWhitespace(ch);
+  }
+
+  public static boolean isBoundary(int ch) {
+    return isWhitespace(ch) || ch == ']' || ch == '}' || ch == ')' || ch == '[' || ch == '{' || ch == '(' || ch == '\\' || ch == '"';
+  }
+
+  public static String toClassString(Object o) {
     if (o == null) {
       return "null";
     }
@@ -991,7 +1086,7 @@ public class EDNReader {
     return o.getClass().getName() + ": " + o.toString();
   }
 
-  public String toUnfinishedCollString(Object o) {
+  public static String toUnfinishedCollString(Object o) {
     if (o instanceof APersistentVector) {
       return (String) ((APersistentVector) o).stream().map(String::valueOf).collect(Collectors.joining(" ", "[", ""));
     }
@@ -1009,14 +1104,5 @@ public class EDNReader {
     }
 
     throw new RuntimeException("Unknown object type " + toClassString(o));
-  }
-
-  public String context() {
-    String context = reader.context(200);
-    if (context != null) {
-      return ", context:\n" + context;
-    } else {
-      return "";
-    }
   }
 }

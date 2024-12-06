@@ -4,6 +4,43 @@
    [clojure.string :as str]
    [clojure.test :refer [is are deftest testing]]))
 
+(deftest basics-test
+  (are [s v] (= v (edn/read-string s))
+    ""    nil
+    " "   nil
+    ","   nil
+
+    "{}" {}
+    "{\"key\" \"value\"}" {"key" "value"}
+    "{1 2, 3 4}" {1 2, 3 4}
+
+    "()" ()
+    "(1 2 3)" '(1 2 3)
+    "(,\n1,2\n, \n3\n   )" '(1 2 3)
+
+    "[]" []
+    "[1 2 3]" '[1 2 3]
+    "[,\n1,2\n, \n3\n   ]" '[1 2 3]
+
+    "#{}" #{}
+    "#{1 2 3}" '#{1 2 3}
+    "#{,\n1,2\n, \n3\n   }" '#{1 2 3})
+
+  (are [s c m] (thrown-with-msg? c m (edn/read-string s))
+    "{"          Exception #"EOF while reading map"
+    "{1}"        Exception #"Map literal must contain an even number of forms"
+    "{1 2, 3}"   Exception #"Map literal must contain an even number of forms"
+    "}"          Exception #"Unexpected character: \}.*"
+    "{1 2, 1 3}" Exception #"Duplicate key: 1"
+    "("          Exception #"EOF while reading list"
+    "(1 2"       Exception #"EOF while reading list"
+    "["          Exception #"EOF while reading vector"
+    "[1 2"       Exception #"EOF while reading vector"
+    "#{"         Exception #"EOF while reading set"
+    "#{1 2"      Exception #"EOF while reading set"
+    "#{1 2 1}"   Exception #"Duplicate key: 1"
+    "#"          Exception #"EOF while reading dispatch macro"))
+
 (deftest tokens-test
   (are [s e] (= e (edn/read-string s))
     "nil"   nil
