@@ -4,7 +4,7 @@
    [clojure.java.io :as io])
   (:import
    [java.io Reader StringReader]
-   [fast_edn CharReader EDNReader]))
+   [fast_edn EdnReader]))
 
 (defn read
   "Reads the next object from source (*in* by default).
@@ -28,7 +28,7 @@
   ([source]
    (read {} source))
   ([opts source]
-   (let [parser (EDNReader.
+   (let [parser (EdnReader.
                   (io/reader source)
                   (:buffer opts 8192)
                   (merge default-data-readers (:readers opts))

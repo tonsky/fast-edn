@@ -8,7 +8,7 @@ import java.util.function.*;
 import java.util.stream.*;
 
 @SuppressWarnings("unchecked")
-public class EDNReader {
+public class EdnReader {
   public final static Keyword TAG_KEY = Keyword.intern(null, "tag");
   public final static Keyword PARAM_TAGS_KEY = Keyword.intern(null, "param-tags");
 
@@ -24,7 +24,7 @@ public class EDNReader {
   public       char[]  accumulator;
   public       int     accumulatorLength;
 
-  public EDNReader(Reader reader, int bufferSize, ILookup dataReaders, IFn defaultDataReader, boolean throwOnEOF, Object eofValue) {
+  public EdnReader(Reader reader, int bufferSize, ILookup dataReaders, IFn defaultDataReader, boolean throwOnEOF, Object eofValue) {
     this.reader = reader;
     this.dataReaders = dataReaders;
     this.defaultDataReader = defaultDataReader;
@@ -93,7 +93,7 @@ public class EDNReader {
   }
 
   public int skipWhitespace() {
-    return skip(EDNReader::isWhitespace);
+    return skip(EdnReader::isWhitespace);
   }
 
   public boolean compareNext(int ch, String s) {
