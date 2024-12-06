@@ -8,34 +8,38 @@ import java.util.function.*;
 import java.util.stream.*;
 
 @SuppressWarnings("unchecked")
-public class EdnReader {
+public class EdnParser {
   public final static Keyword TAG_KEY = Keyword.intern(null, "tag");
   public final static Keyword PARAM_TAGS_KEY = Keyword.intern(null, "param-tags");
 
-  public final Reader  reader;
   public final ILookup dataReaders;
   public final IFn     defaultDataReader;
   public final boolean throwOnEOF;
   public final Object  eofValue;
 
-  public final char[]  readBuf;
-  public       int     readPos;
-  public       int     readLen;
-  public       char[]  accumulator;
-  public       int     accumulatorLength;
+  public Reader  reader = null;
+  public char[]  readBuf;
+  public int     readPos = 0;
+  public int     readLen = 0;
+  public char[]  accumulator;
+  public int     accumulatorLength;
 
-  public EdnReader(Reader reader, int bufferSize, ILookup dataReaders, IFn defaultDataReader, boolean throwOnEOF, Object eofValue) {
-    this.reader = reader;
+  public EdnParser(int bufferSize, ILookup dataReaders, IFn defaultDataReader, boolean throwOnEOF, Object eofValue) {
     this.dataReaders = dataReaders;
     this.defaultDataReader = defaultDataReader;
     this.throwOnEOF = throwOnEOF;
     this.eofValue = eofValue;
 
     this.readBuf = new char[bufferSize];
-    this.readPos = 0;
-    this.readLen = 0;
     this.accumulator = new char[32];
     this.accumulatorLength = 0;
+  }
+
+  public EdnParser withReader(Reader reader) {
+    this.reader = reader;
+    this.readPos = 0;
+    this.readLen = 0;
+    return this;
   }
 
 
@@ -74,13 +78,10 @@ public class EdnReader {
   }
 
   public int skip(IntPredicate pred) {
-    while (true) {
-      if (eof()) {
-        return -1;
-      } 
+    while (!eof()) {
       char[] buf = readBuf;
-      int pos = readPos;
-      int len = readLen;
+      int    pos = readPos;
+      int    len = readLen;
       for (; pos < len; ++pos) {
         int ch = buf[pos];
         if (!pred.test(ch)) {
@@ -90,10 +91,11 @@ public class EdnReader {
       }
       nextBuffer();
     }
+    return -1;
   }
 
   public int skipWhitespace() {
-    return skip(EdnReader::isWhitespace);
+    return skip(EdnParser::isWhitespace);
   }
 
   public boolean compareNext(int ch, String s) {

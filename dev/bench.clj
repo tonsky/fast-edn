@@ -172,8 +172,17 @@
   (fast-edn.core/read-string (slurp "dev/data/strings_uni_250_safe.edn"))
 
   (gen-uni-strings 250)
-  (let [s (slurp "dev/data/strings_uni_250_safe.edn")]
-    (fast-edn.core/read-string s))
+  
+  ;; 1.22 μs
+  
+  (let [s (slurp "dev/data/edn_basic_100.edn")]
+    (duti.core/bench
+      (fast-edn.core/read-string {:buffer 1024} s)))
+  
+  (let [s (slurp "dev/data/edn_basic_100.edn")
+        p (fast-edn.core/parser {:buffer 1024, :eof nil})]
+    (duti.core/bench
+      (fast-edn.core/read-impl p (java.io.StringReader. s))))
 
   (bench-edn {:profile :long
               :pattern #"strings_.*"}))
@@ -209,20 +218,20 @@
     (gen-keywords 10))
   (bench-edn {:pattern #".*\.edn"}))
 
-;                    53673a3   d715795
-;                    -------   -------   -------
-; edn_basic_10         0.115     0.122     0.668
-; edn_basic_100        0.548     0.528     1.019
-; edn_basic_1000       3.125     3.178     4.022
-; edn_basic_10000     40.650    39.409    42.018
-; edn_basic_100000   397.643   376.625   401.514
-; ints_1400           35.974    30.800    30.236
-; keywords_10          0.641     0.639     1.153
-; keywords_100         5.720     5.730     6.178
-; keywords_1000       66.411    62.685    66.299
-; keywords_10000     820.167   807.494   796.849
-; strings_1000        43.875    44.212    43.315
-; strings_uni_250    120.249   117.282   108.563
+;                    53673a3   d715795   38e48ac
+;                    -------   -------   -------   -------
+; edn_basic_10         0.115     0.122     0.668     0.289
+; edn_basic_100        0.548     0.528     1.019     0.669
+; edn_basic_1000       3.125     3.178     4.022     2.913
+; edn_basic_10000     40.650    39.409    42.018    40.775
+; edn_basic_100000   397.643   376.625   401.514   398.696
+; ints_1400           35.974    30.800    30.236    32.013
+; keywords_10          0.641     0.639     1.153     0.741
+; keywords_100         5.720     5.730     6.178     5.462
+; keywords_1000       66.411    62.685    66.299    61.439
+; keywords_10000     820.167   807.494   796.849   781.260
+; strings_1000        43.875    44.212    43.315    41.988
+; strings_uni_250    120.249   117.282   108.563   113.033
 
 ; ┌────────────────┬─────────────┬─────────────┬─────────────┬─────────────┐
 ; │ keywords       │          10 │         100 │        1000 │       10000 │
