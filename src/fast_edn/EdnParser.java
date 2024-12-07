@@ -20,6 +20,7 @@ public class EdnParser {
   public Reader reader = null;
   public char[] readBuf;
   public int    readPos = 0;
+  public int    readGlobalPos = 0;
   public int    readLen = 0;
   public char[] accumulator;
   public int    accumulatorLength;
@@ -38,6 +39,7 @@ public class EdnParser {
   public EdnParser withReader(Reader reader) {
     this.reader = reader;
     this.readPos = 0;
+    this.readGlobalPos = 0;
     this.readLen = 0;
     return this;
   }
@@ -50,6 +52,7 @@ public class EdnParser {
   public void nextBuffer() {
     if (readLen != -1) {
       try {
+        readGlobalPos += readLen;
         readLen = reader.read(readBuf, 0, readBuf.length);
         if (readLen >= 0) {
           readPos = 0;
@@ -143,7 +146,9 @@ public class EdnParser {
       return "";
     }
 
-    return ", context:\n" + new String(readBuf, start, end - start) + "\n" + " ".repeat(readPos - start - 1) + "^";
+    int offset = readGlobalPos + (readLen == -1 ? 0 : readPos);
+
+    return ", offset: " + offset + ", context:\n" + new String(readBuf, start, end - start) + "\n" + " ".repeat(readPos - start - 1) + "^";
   }
 
 

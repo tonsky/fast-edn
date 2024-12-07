@@ -14,8 +14,7 @@
 
 (defn test-all []
   (virgil/compile-java ["src/fast_edn"])
-  (duti/reload {:only :all})
-  (duti/test #"fast-edn\.(.*-)?test"))
+  (duti/test #"fast-edn\.test"))
 
 (defn -test-main [_]
   (virgil/compile-java ["src/fast_edn"])
