@@ -1074,15 +1074,37 @@ public class EdnParser {
   // Misc //
   //////////
 
+  public static final BitSet whitespaceMask = new BitSet(0x30);
+  public static final BitSet boundaryMask = new BitSet(0x80);
+  
+  static {
+    whitespaceMask.set('\t');
+    whitespaceMask.set('\n');
+    whitespaceMask.set('\r');
+    whitespaceMask.set(' ');
+    whitespaceMask.set(',');
+
+    boundaryMask.set('\t');
+    boundaryMask.set('\n');
+    boundaryMask.set('\r');
+    boundaryMask.set(' ');
+    boundaryMask.set(',');
+    boundaryMask.set('"');
+    boundaryMask.set('(');
+    boundaryMask.set(')');
+    boundaryMask.set('[');
+    boundaryMask.set('\\');
+    boundaryMask.set(']');
+    boundaryMask.set('{');
+    boundaryMask.set('}');
+  }
+
   public static boolean isWhitespace(int ch) {
-    if (ch >= '\u0021' && ch <= '\u002B') return false;
-    if (ch >= '\u002D' && ch < '\u2000') return false;
-    if (ch == ' ' || ch == '\n' || ch == ',' || ch == '\t' || ch == '\r') return true;
-    return Character.isWhitespace(ch);
+    return ch < 0x30 && whitespaceMask.get(ch);
   }
 
   public static boolean isBoundary(int ch) {
-    return isWhitespace(ch) || ch == ']' || ch == '}' || ch == ')' || ch == '[' || ch == '{' || ch == '(' || ch == '\\' || ch == '"';
+    return ch < 0x80 && boundaryMask.get(ch);
   }
 
   public static String toClassString(Object o) {

@@ -1,13 +1,15 @@
 (ns bench
   (:require
-   [fast-edn.core :as edn2]
    [charred.api :as charred]
    [cheshire.core :as cheshire]
+   [clojure.data.generators :as gen]
    [clojure.edn :as edn]
    [clojure.java.io :as io]
    [clojure.string :as str]
    [clojure.tools.reader.edn :as tools]
    [duti.core :as duti]
+   [fast-edn.generators :as cgen]
+   [fast-edn.core :as edn2]
    [jsonista.core :as jsonista])
   (:import
    [java.io File FileFilter]))
@@ -46,6 +48,26 @@
 
 (comment
   (gen-edn-basic))
+
+(defn gen-edn-nested
+  ([]
+   (gen-edn-nested 8))
+  ([depth]
+   (if (= depth 0)
+     (gen/one-of
+       #(gen/geometric 0.0001) ; long
+       #(gen/string gen/printable-ascii-char (gen/geometric 0.05))
+       gen/double
+       gen/boolean)
+     (into {} (for [_ (range (+ 1 (rand-int 4)))]
+                [(gen/keyword (gen/geometric 0.1))
+                 (gen-edn-nested (dec depth))])))))
+
+(comment
+  (let [s (with-out-str
+            (clojure.pprint/pprint (gen-edn-nested)))]
+    (spit (io/file "dev/data/edn_nested_100000.edn") s)
+    (count s)))
 
 (defn bench-edn [{pattern :pattern
                   profile :profile
@@ -108,11 +130,14 @@
 ; │ fast-edn       │   62.529 μs │
 ; └────────────────┴─────────────┘
 
+(defn rand-string ^String []
+  (str/join (repeatedly (+ 5 (rand-int 95)) #(rand-nth "abcdefghijklmnopqrstuvwxyz!?*-+<>,.: /"))))
+     
 (defn gen-strings [cnt]
   (with-open [w (io/writer (str "dev/data/strings_" cnt ".edn"))]
     (.write w "[")
     (dotimes [_ cnt]
-      (let [s (str/join (repeatedly (+ 5 (rand-int 95)) #(rand-nth "abcdefghijklmnopqrstuvwxyz!?*-+<>,.: /")))]
+      (let [s (rand-string)]
         (.write w "\"")
         (.write w s)
         (.write w "\" ")))
@@ -179,9 +204,11 @@
     (duti.core/bench
       (fast-edn.core/read-string {:buffer 1024} s)))
   
-  (let [s (slurp "dev/data/edn_basic_100.edn")
+  (let [s (slurp "dev/data/edn_nested_100000.edn")
         p (fast-edn.core/parser {:buffer 1024, :eof nil})]
     (duti.core/bench
+      (fast-edn.core/read-impl p (java.io.StringReader. s)))
+    #_(duti.core/profile-for 10000
       (fast-edn.core/read-impl p (java.io.StringReader. s))))
 
   (bench-edn {:profile :long
@@ -216,22 +243,25 @@
 (comment
   (doseq [n (range 10 100 1000 10000)]
     (gen-keywords 10))
+  (bench-edn {:pattern #"edn_basic_100000\.edn"})
+  (bench-edn {:pattern #"edn_nested.*\.edn"})
   (bench-edn {:pattern #".*\.edn"}))
 
-;                    53673a3   d715795   38e48ac
-;                    -------   -------   -------   -------
-; edn_basic_10         0.115     0.122     0.668     0.289
-; edn_basic_100        0.548     0.528     1.019     0.669
-; edn_basic_1000       3.125     3.178     4.022     2.913
-; edn_basic_10000     40.650    39.409    42.018    40.775
-; edn_basic_100000   397.643   376.625   401.514   398.696
-; ints_1400           35.974    30.800    30.236    32.013
-; keywords_10          0.641     0.639     1.153     0.741
-; keywords_100         5.720     5.730     6.178     5.462
-; keywords_1000       66.411    62.685    66.299    61.439
-; keywords_10000     820.167   807.494   796.849   781.260
-; strings_1000        43.875    44.212    43.315    41.988
-; strings_uni_250    120.249   117.282   108.563   113.033
+;                    53673a3   d715795   38e48ac   7cc4e77
+;                    -------   -------   -------   -------   -------
+; edn_basic_10         0.115     0.122     0.668     0.289     0.278
+; edn_basic_100        0.548     0.528     1.019     0.669     0.617
+; edn_basic_1000       3.125     3.178     4.022     2.913     2.958
+; edn_basic_10000     40.650    39.409    42.018    40.775    38.801
+; edn_basic_100000   397.643   376.625   401.514   398.696   369.616
+; edn_nested_100000                                904.766   476.696
+; ints_1400           35.974    30.800    30.236    32.013    30.545
+; keywords_10          0.641     0.639     1.153     0.741     0.630
+; keywords_100         5.720     5.730     6.178     5.462     5.031
+; keywords_1000       66.411    62.685    66.299    61.439    57.294
+; keywords_10000     820.167   807.494   796.849   781.260   644.352
+; strings_1000        43.875    44.212    43.315    41.988    42.111
+; strings_uni_250    120.249   117.282   108.563   113.033   102.445
 
 ; ┌────────────────┬─────────────┬─────────────┬─────────────┬─────────────┐
 ; │ keywords       │          10 │         100 │        1000 │       10000 │
