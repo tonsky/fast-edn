@@ -17,12 +17,12 @@ public class EdnParser {
   public final boolean throwOnEOF;
   public final Object  eofValue;
 
-  public Reader  reader = null;
-  public char[]  readBuf;
-  public int     readPos = 0;
-  public int     readLen = 0;
-  public char[]  accumulator;
-  public int     accumulatorLength;
+  public Reader reader = null;
+  public char[] readBuf;
+  public int    readPos = 0;
+  public int    readLen = 0;
+  public char[] accumulator;
+  public int    accumulatorLength;
 
   public EdnParser(int bufferSize, ILookup dataReaders, IFn defaultDataReader, boolean throwOnEOF, Object eofValue) {
     this.dataReaders = dataReaders;
@@ -696,7 +696,7 @@ public class EdnParser {
     }
 
     if (buf[start] == '0') {
-      if (end - start >= 3 && buf[start + 1] == 'x' || buf[start + 1] == 'X') {
+      if (end - start >= 3 && (buf[start + 1] == 'x' || buf[start + 1] == 'X')) {
         radix = 16;
         start = start + 2;
       } else if (end - start >= 2) {
@@ -711,10 +711,10 @@ public class EdnParser {
       return BigInt.fromBigInteger(bn);
     }
 
+    String str = new String(buf, start, end - start);
     try {
-      return Long.valueOf(Long.parseLong(new String(buf, start, end - start), radix));
+      return Long.valueOf(Long.parseLong(str, radix));
     } catch (Exception e) {
-      String str = new String(buf, start, end - start);
       BigInteger bn = new BigInteger(str, radix);
       return BigInt.fromBigInteger(bn);
     }

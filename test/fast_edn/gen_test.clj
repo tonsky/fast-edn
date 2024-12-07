@@ -13,11 +13,11 @@
 
 (ns fast-edn.gen-test
   (:require
-   [fast-edn.generators :as cgen]
-   [fast-edn.core :as edn]
    [clojure.test :refer [deftest is are testing]]
    [clojure.test.generative :refer [defspec]]
-   [clojure.test.generative.runner :as runner]))
+   [clojure.test.generative.runner :as runner]
+   [fast-edn.core :as edn]
+   [fast-edn.generators :as cgen]))
 
 (defn roundtrip
   "Print an object and read it back as edn. Returns rather than throws
@@ -53,9 +53,3 @@
 
 (deftest no-roundtrip-test
   (runner/run cpus time-ms #'fast-edn.gen-test/types-that-should-not-roundtrip))
-
-(comment
-  (try
-    (runner/run 10 10000 #'fast-edn.gen-test/types-that-should-roundtrip)
-    (catch clojure.lang.ExceptionInfo e
-      (:input (ex-data e)))))

@@ -94,7 +94,9 @@
    gen/date
    gen/ratio
    gen/bigint
-   gen/bigdec])
+   gen/bigdec
+   gen/double ;; added by fast-edn
+   ])
 
 (defn- call-through
   "Recursively call x until it doesn't return a function."
@@ -108,7 +110,8 @@
   (call-through (rand-nth ednable-scalars)))
 
 (def ednable-collections
-  [[gen/vec [ednable-scalars]]
+  [[gen/list [ednable-scalars]] ;; added by fast-edn
+   [gen/vec [ednable-scalars]]
    [gen/set [ednable-scalars]]
    [gen/hash-map [ednable-scalars ednable-scalars]]])
 
