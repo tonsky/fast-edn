@@ -859,6 +859,7 @@ public class EdnParser {
       } else if (ch == -1) {
         break;
       } else if (len >= arrayMapBuf.length) {
+        unread();
         return readHashMap(ns, Arrays.copyOf(arrayMapBuf, len));
       } else {
         unread();

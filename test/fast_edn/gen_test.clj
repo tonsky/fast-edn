@@ -53,3 +53,9 @@
 
 (deftest no-roundtrip-test
   (runner/run cpus time-ms #'fast-edn.gen-test/types-that-should-not-roundtrip))
+
+(comment
+  (try
+    (runner/run cpus time-ms #'fast-edn.gen-test/types-that-should-roundtrip)
+    (catch Exception e
+      (println (ex-data e)))))
