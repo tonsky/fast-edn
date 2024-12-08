@@ -198,6 +198,8 @@
 
   (gen-uni-strings 250)
   
+  (fast-edn.core/read-string "{:a 1 :b 2 :c 3 :d 4 :e 5 :f 6 :g 7 :h 8 :i")
+  
   ;; 1.22 μs
   
   (let [s (slurp "dev/data/edn_basic_100.edn")]
@@ -208,7 +210,7 @@
         p (fast-edn.core/parser {:buffer 1024, :eof nil})]
     (duti.core/bench
       (fast-edn.core/read-impl p (java.io.StringReader. s)))
-    #_(duti.core/profile-for 10000
+    (duti.core/profile-for 10000
       (fast-edn.core/read-impl p (java.io.StringReader. s))))
 
   (bench-edn {:profile :long

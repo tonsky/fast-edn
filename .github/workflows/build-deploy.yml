@@ -31,6 +31,7 @@ jobs:
         uses: DeLaGuardo/setup-clojure@12.5
         with:
           cli: latest
+          lein: latest
       
       - run: ./script/test.sh
 

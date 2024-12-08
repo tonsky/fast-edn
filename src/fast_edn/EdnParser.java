@@ -149,7 +149,11 @@ public class EdnParser {
 
     int offset = readGlobalPos + (readLen == -1 ? 0 : readPos);
 
-    return ", offset: " + offset + ", context:\n" + new String(readBuf, start, end - start) + "\n" + " ".repeat(readPos - start - 1) + "^";
+    final char[] indentArray = new char[readPos - start - 1];
+    Arrays.fill(indentArray, ' ');
+    String indent = new String(indentArray);
+
+    return ", offset: " + offset + ", context:\n" + new String(readBuf, start, end - start) + "\n" + indent + "^";
   }
 
 
@@ -878,8 +882,7 @@ public class EdnParser {
         }
 
         ch = skipWhitespace();
-        if (ch == '}') {
-
+        if (ch == '}' || ch == -1) {
           throw new RuntimeException("Map literal must contain an even number of forms: " + toUnfinishedCollString(PersistentArrayMap.createWithCheck(Arrays.copyOf(arrayMapBuf, len))) + ", " + key + context());
         }
 
@@ -890,7 +893,7 @@ public class EdnParser {
         arrayMapBuf[len++] = val;
       }
     }
-
+    
     throw new RuntimeException("EOF while reading map: " + toUnfinishedCollString(PersistentArrayMap.createWithCheck(Arrays.copyOf(arrayMapBuf, len))) + context());
   }
 
@@ -935,8 +938,8 @@ public class EdnParser {
         }
 
         ch = skipWhitespace();
-        if (ch == '}') {
-          throw new RuntimeException("Map literal must contain an even number of forms: " + toUnfinishedCollString(acc.persistent()) + context());
+        if (ch == '}' || ch == -1) {
+          throw new RuntimeException("Map literal must contain an even number of forms: " + toUnfinishedCollString(acc.persistent()) + ", " + key + context());
         }
 
         unread();
