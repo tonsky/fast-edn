@@ -17,13 +17,14 @@ public class EdnParser {
   public final boolean throwOnEOF;
   public final Object  eofValue;
 
-  public Reader reader = null;
-  public char[] readBuf;
-  public int    readPos = 0;
-  public int    readGlobalPos = 0;
-  public int    readLen = 0;
-  public char[] accumulator;
-  public int    accumulatorLength;
+  public Reader   reader = null;
+  public char[]   readBuf;
+  public int      readPos = 0;
+  public int      readGlobalPos = 0;
+  public int      readLen = 0;
+  public char[]   accumulator;
+  public int      accumulatorLength;
+  public Object[] arrayMapBuf = new Object[16];
 
   public EdnParser(int bufferSize, ILookup dataReaders, IFn defaultDataReader, boolean throwOnEOF, Object eofValue) {
     this.dataReaders = dataReaders;
@@ -845,8 +846,65 @@ public class EdnParser {
   /////////////
 
   public IPersistentMap readMap(String ns) {
+    int len = 0;
+    while (!eof()) {
+      int ch = skipWhitespace();
+
+      if (ch == '}') {
+        return PersistentArrayMap.createWithCheck(Arrays.copyOf(arrayMapBuf, len));
+      } else if (ch == -1) {
+        break;
+      } else if (len >= arrayMapBuf.length) {
+        return readHashMap(ns, Arrays.copyOf(arrayMapBuf, len));
+      } else {
+        unread();
+        Object key = readObject();
+        if (ns != null) {
+          if (key instanceof Keyword) {
+            Keyword kw = (Keyword) key;
+            if (kw.getNamespace() == null) {
+              key = Keyword.intern(ns, kw.getName());
+            } else if (kw.getNamespace().equals("_")) {
+              key = Keyword.intern(null, kw.getName());
+            }
+          } else if (key instanceof Symbol) {
+            Symbol s = (Symbol) key;
+            if (s.getNamespace() == null) {
+              key = Symbol.intern(ns, s.getName());
+            } else if (s.getNamespace().equals("_")) {
+              key = Symbol.intern(null, s.getName());
+            }
+          }
+        }
+
+        ch = skipWhitespace();
+        if (ch == '}') {
+
+          throw new RuntimeException("Map literal must contain an even number of forms: " + toUnfinishedCollString(PersistentArrayMap.createWithCheck(Arrays.copyOf(arrayMapBuf, len))) + ", " + key + context());
+        }
+
+        unread();
+        Object val = readObject();
+        
+        arrayMapBuf[len++] = key;
+        arrayMapBuf[len++] = val;
+      }
+    }
+
+    throw new RuntimeException("EOF while reading map: " + toUnfinishedCollString(PersistentArrayMap.createWithCheck(Arrays.copyOf(arrayMapBuf, len))) + context());
+  }
+
+  public IPersistentMap readHashMap(String ns, Object[] init) {
     ATransientMap acc = (ATransientMap) PersistentArrayMap.EMPTY.asTransient();
+    
     int count = 0;
+    for (int i = 0; i < init.length; i += 2) {
+      acc = (ATransientMap) acc.assoc(init[i], init[i + 1]);
+      count = count + 1;
+      if (acc.count() != count) {
+        throw new RuntimeException("Duplicate key: " + init[i] + " reading map: " + toUnfinishedCollString(acc.persistent()) + context());
+      }
+    }
 
     while (!eof()) {
       int ch = skipWhitespace();
@@ -884,10 +942,10 @@ public class EdnParser {
         unread();
         Object val = readObject();
         acc = (ATransientMap) acc.assoc(key, val);
-        if (count + 1 != acc.count()) {
-          throw new IllegalArgumentException("Duplicate key: " + key + " reading map: " + toUnfinishedCollString(acc.persistent()) + context());
-        }
         count = count + 1;
+        if (acc.count() != count) {
+          throw new RuntimeException("Duplicate key: " + key + " reading map: " + toUnfinishedCollString(acc.persistent()) + context());
+        }
       }
     }
 
