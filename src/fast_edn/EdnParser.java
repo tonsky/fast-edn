@@ -1196,4 +1196,106 @@ public class EdnParser {
 
     throw new RuntimeException("Unknown object type " + toClassString(o));
   }
+
+  public static byte digit10(CharSequence cs, int i) {
+    char ch = cs.charAt(i);
+    if (ch < '0' || ch > '9') {
+      throw new RuntimeException("Unexpected character at pos " + i + ": " + ch + " parsing \"" + cs + "\"");
+    }
+    return (byte) (ch - '0');
+  }
+
+  public static Object parseTimestamp(IFn newTimestamp, CharSequence cs) {
+    int year = 0;
+    int months = 1;
+    int days = 1;
+    int hours = 0;
+    int minutes = 0;
+    int seconds = 0;
+    int nano = 0;
+    int len = cs.length();
+    int pos = 0;
+    int zoneSign = 1;
+    int zoneHours = 0;
+    int zoneMinutes = 0;
+
+    if (len < 4) {
+      throw new RuntimeException("Unexpected end of string before " + 4 + " parsing \"" + cs + "\"");
+    }
+
+    year = digit10(cs, 0) * 1000 + digit10(cs, 1) * 100 + digit10(cs, 2) * 10 + digit10(cs, 3);
+    pos += 4;
+
+    if (len >= 7 && cs.charAt(4) == '-') {
+      months = digit10(cs, 5) * 10 + digit10(cs, 6);
+      pos += 3;
+    }
+
+    if (len >= 10 && cs.charAt(7) == '-') {
+      days = digit10(cs, 8) * 10 + digit10(cs, 9);
+      pos += 3;
+    }
+
+    if (len >= 13 && cs.charAt(10) == 'T') {
+      hours = digit10(cs, 11) * 10 + digit10(cs, 12);
+      pos += 3;
+    }
+
+    if (len >= 16 && cs.charAt(13) == ':') {
+      minutes = digit10(cs, 14) * 10 + digit10(cs, 15);
+      pos += 3;
+    }
+
+    if (len >= 19 && cs.charAt(16) == ':') {
+      seconds = digit10(cs, 17) * 10 + digit10(cs, 18);
+      pos += 3;
+    }
+
+    if (pos < len && cs.charAt(pos) == '.') {
+      pos = pos + 1;
+      int mult = 100000000;
+      for (; pos < len && mult > 0; ++pos) {
+        char ch = cs.charAt(pos);
+        if (ch >= '0' && ch <= '9') {
+          nano = nano + (ch - '0') * mult;
+          mult = mult / 10;
+        } else {
+          break;
+        }
+      }
+    }
+
+    if (pos < len) {
+      switch (cs.charAt(pos)) {
+        case 'Z':
+          pos = pos + 1;
+          break;
+          
+        case '-':
+          zoneSign = -1;
+          // fall through intentional
+
+        case '+':
+          if (pos + 5 >= len) {
+            throw new RuntimeException("Unexpected end of string before " + (pos + 5) + " parsing \"" + cs + "\"");
+          }
+          zoneHours = digit10(cs, pos + 1) * 10 + digit10(cs, pos + 2);
+          if (':' != cs.charAt(pos + 3)) {
+            throw new RuntimeException("Unexpected character at pos " + (pos + 3) + ": " + cs.charAt(pos + 3) + " parsing \"" + cs + "\"");
+          }
+          zoneMinutes = digit10(cs, pos + 4) * 10 + digit10(cs, pos + 5);
+          pos = pos + 6;
+          break;
+
+        default:
+          throw new RuntimeException("Unexpected character at pos " + pos + ": " + cs.charAt(pos) + " parsing \"" + cs + "\"");
+      }
+    }
+
+    if (pos < len) {
+      throw new RuntimeException("Unexpected character at pos " + pos + ": " + cs.charAt(pos) + " parsing \"" + cs + "\"");
+    }
+
+    return newTimestamp.invoke(year, months, days, hours, minutes, seconds, nano, zoneSign, zoneHours, zoneMinutes);
+  }
 }

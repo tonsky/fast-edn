@@ -249,6 +249,12 @@
   (bench-edn {:pattern #"edn_nested.*\.edn"})
   (bench-edn {:pattern #".*\.edn"}))
 
+(comment
+  (duti.core/bench
+    (clojure.instant/read-instant-date "2024-12-17T15:54:00.000+01:00"))
+  (duti.core/bench
+    (fast-edn.core/read-instant-date "2024-12-17T15:54:00.000+01:00")))
+
 ;                    53673a3   d715795   38e48ac   7cc4e77   a8b46be
 ;                    -------   -------   -------   -------   -------   -------
 ; edn_basic_10         0.115     0.122     0.668     0.289     0.278     0.270

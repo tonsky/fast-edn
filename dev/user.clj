@@ -16,6 +16,9 @@
   (virgil/compile-java ["src/fast_edn"])
   (duti/test #"fast-edn\.test"))
 
+(comment
+  (duti/test #"fast-edn\..*test"))
+
 (defn -test-main [_]
   (virgil/compile-java ["src/fast_edn"])
   (duti/test-exit #"fast-edn\.(.*-)?test"))

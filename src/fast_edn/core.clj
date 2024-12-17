@@ -1,15 +1,41 @@
 (ns fast-edn.core
-  (:refer-clojure :exclude [merge read read-string])
+  (:refer-clojure :exclude [default-data-readers merge read read-string])
   (:require
    [clojure.java.io :as io])
   (:import
    [java.io ByteArrayInputStream CharArrayReader File FileReader InputStream InputStreamReader Reader StringReader]
+   [java.time ZonedDateTime ZoneOffset]
+   [java.util Date]
    [fast_edn EdnParser]))
 
 (defn- merge [m1 m2]
   (if (empty? m2)
     m1
     (persistent! (reduce-kv assoc! (transient m1) m2))))
+
+(defn construct-date
+  "Construct a java.util.Date, which expresses the original instant as milliseconds since the epoch, UTC.
+   Faster version of clojure.instant/construct-date"
+  [years months days hours minutes seconds nanoseconds offset-sign offset-hours offset-minutes]
+  (let [zone (ZoneOffset/ofHoursMinutes (* offset-sign offset-hours) offset-minutes)]
+    (-> (ZonedDateTime/of years months days hours minutes seconds nanoseconds zone)
+      (.toInstant)
+      (Date/from))))
+
+(defn parse-timestamp
+  "Parse a string containing an RFC3339-like like timestamp.
+   Faster version of clojure.instant/parse-timestamp"
+  [new-instant ^CharSequence cs]
+  (EdnParser/parseTimestamp new-instant cs))
+
+(defn read-instant-date
+  "Faster version of clojure.instant/read-instant-date"
+  [^CharSequence cs]
+  (parse-timestamp construct-date cs))
+
+(def default-data-readers
+  (assoc clojure.core/default-data-readers
+    'inst read-instant-date))
 
 (defn reader ^Reader [source]
   (condp instance? source
