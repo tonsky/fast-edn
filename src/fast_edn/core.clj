@@ -53,6 +53,7 @@
    to parse a lot of small EDNs. Not thread-safe"
   ^EdnParser [opts]
   (EdnParser.
+    (boolean (:count-lines opts false))
     (:buffer opts 1024)
     (merge default-data-readers (:readers opts))
     (:default opts)
@@ -75,13 +76,15 @@
 
    opts is a map that can include the following keys:
   
-     :eof      - Value to return on end-of-file. When not supplied, eof throws
-                 an exception.
-     :readers  - A map of tag symbol -> data-reader fn to be considered
-                 before default-data-readers
-     :default  - A function of two args, that will, if present and no reader is
-                 found for a tag, be called with the tag and the value
-     :buffer   - Size of buffer to read from source (1024 by default)"
+     :eof         - Value to return on end-of-file. When not supplied, eof
+                    throws an exception.
+     :readers     - A map of tag symbol -> data-reader fn to be considered
+                    before default-data-readers
+     :default     - A function of two args, that will, if present and no reader
+                    is found for a tag, be called with the tag and the value
+     :buffer      - Int, size of buffer to read from source (1024 by default)
+     :count-lines - Boolean, whether to report line/column numbers in exceptions
+                    (false by default)"
   ([]
    (read *in*))
   ([source]
@@ -96,18 +99,25 @@
 
    opts is a map that can include the following keys:
   
-     :eof      - Value to return on end-of-file. When not supplied, eof throws
-                 an exception.
-     :readers  - A map of tag symbol -> data-reader fn to be considered
-                 before default-data-readers
-     :default  - A function of two args, that will, if present and no reader is
-                 found for a tag, be called with the tag and the value
-     :buffer   - Size of buffer to read from source (1024 by default)"
+     :eof         - Value to return on end-of-file. When not supplied, eof throws
+                    an exception.
+     :readers     - A map of tag symbol -> data-reader fn to be considered
+                    before default-data-readers
+     :default     - A function of two args, that will, if present and no reader is
+                    found for a tag, be called with the tag and the value
+     :buffer      - Int, size of buffer to read from source (1024 by default)
+     :count-lines - Boolean, whether to report line/column numbers in exceptions
+                    (false by default)"
   ([s]
    (when s
      (read-impl
-       (EdnParser. 1024 default-data-readers nil false nil)
+       (EdnParser. false 1024 default-data-readers nil false nil)
        (StringReader. s))))
   ([opts s]
    (when s
      (read-impl (parser opts) (StringReader. s)))))
+
+(comment
+  (read (clojure.lang.LineNumberingPushbackReader. (StringReader. "{:a 1 :b}")))
+  (read (java.io.LineNumberReader. (StringReader. "{:a 1 :b}")))
+  (read (StringReader. "{:a 1\n :b}")))

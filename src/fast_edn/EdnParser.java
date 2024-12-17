@@ -12,6 +12,7 @@ public class EdnParser {
   public final static Keyword TAG_KEY = Keyword.intern(null, "tag");
   public final static Keyword PARAM_TAGS_KEY = Keyword.intern(null, "param-tags");
 
+  public final boolean countLines;
   public final ILookup dataReaders;
   public final IFn     defaultDataReader;
   public final boolean throwOnEOF;
@@ -26,7 +27,12 @@ public class EdnParser {
   public int      accumulatorLength;
   public Object[] arrayMapBuf = new Object[16];
 
-  public EdnParser(int bufferSize, ILookup dataReaders, IFn defaultDataReader, boolean throwOnEOF, Object eofValue) {
+  public int      line = 0;
+  public int      column = 0;
+  public boolean  skipLF = false;
+
+  public EdnParser(boolean countLines, int bufferSize, ILookup dataReaders, IFn defaultDataReader, boolean throwOnEOF, Object eofValue) {
+    this.countLines = countLines;
     this.dataReaders = dataReaders;
     this.defaultDataReader = defaultDataReader;
     this.throwOnEOF = throwOnEOF;
@@ -50,13 +56,51 @@ public class EdnParser {
   // Reader //
   ////////////
 
+  public void updateLineColumn(int until) {
+    char[] buf = readBuf;
+    for (int pos = 0; pos < until; ++pos) {
+      char ch = buf[pos];
+
+      if (skipLF && ch == '\n') {
+        skipLF = false;
+        continue;
+      }
+
+      if (ch == '\r') {
+        skipLF = true;
+        line = line + 1;
+        column = 0;
+      } else if (ch == '\n') {
+        skipLF = false;
+        line = line + 1;
+        column = 0;
+      } else {
+        skipLF = false;
+        column = column + 1;
+      }
+    }
+  }
+
   public void nextBuffer() {
     if (readLen != -1) {
       try {
-        readGlobalPos += readLen;
-        readLen = reader.read(readBuf, 0, readBuf.length);
-        if (readLen >= 0) {
-          readPos = 0;
+        // for better context() in badly buffered readers (e.g. stdin)
+        if (readLen <= readBuf.length / 2) {
+          int readLenNew = reader.read(readBuf, readLen, readBuf.length - readLen);
+          if (readLenNew == -1) {
+            readLen = -1;
+          } else {
+            readLen += readLenNew;
+          }
+        } else {
+          readGlobalPos += readLen;
+          if (countLines) {
+            updateLineColumn(readLen);
+          }
+          readLen = reader.read(readBuf, 0, readBuf.length);
+          if (readLen >= 0) {
+            readPos = 0;
+          }
         }
       } catch (IOException e) {
         Util.sneakyThrow(e);
@@ -93,6 +137,7 @@ public class EdnParser {
           return ch;
         }
       }
+      readPos = pos;
       nextBuffer();
     }
     return -1;
@@ -148,12 +193,17 @@ public class EdnParser {
     }
 
     int offset = readGlobalPos + (readLen == -1 ? 0 : readPos);
-
+    String position = ", offset: " + offset;
+    if (countLines) {
+      updateLineColumn(readPos);
+      position = ", line: " + (line + 1) + ", column: " + (column + 1) + position;
+    }
+    
     final char[] indentArray = new char[readPos - start - 1];
     Arrays.fill(indentArray, ' ');
     String indent = new String(indentArray);
 
-    return ", offset: " + offset + ", context:\n" + new String(readBuf, start, end - start) + "\n" + indent + "^";
+    return position + ", context:\n" + new String(readBuf, start, end - start) + "\n" + indent + "^";
   }
 
 
@@ -323,6 +373,7 @@ public class EdnParser {
       }
 
       accumulatorAppend(buf, start, len);
+      readPos = pos;
       nextBuffer();
     }
 
@@ -426,6 +477,7 @@ public class EdnParser {
       }
 
       accumulatorAppend(buf, start, len);
+      readPos = pos;
       nextBuffer();
     }
 
@@ -551,6 +603,7 @@ public class EdnParser {
       }
 
       accumulatorAppend(buf, start, len);
+      readPos = pos;
       nextBuffer();
     }
 
@@ -650,6 +703,7 @@ public class EdnParser {
       }
 
       accumulatorAppend(buf, start, len);
+      readPos = pos;
       nextBuffer();
     }
 
@@ -1270,7 +1324,7 @@ public class EdnParser {
         case 'Z':
           pos = pos + 1;
           break;
-          
+
         case '-':
           zoneSign = -1;
           // fall through intentional

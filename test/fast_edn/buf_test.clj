@@ -8,7 +8,9 @@
    [clojure.test.generative :refer [defspec]]
    [clojure.test.generative.runner :as runner]
    [fast-edn.core :as edn]
-   [fast-edn.generators :as cgen]))
+   [fast-edn.generators :as cgen])
+  (:import
+   [java.io FilterReader StringReader]))
 
 (defn rand-int
   ([n]
@@ -36,9 +38,15 @@
 (defn rand-str []
   (stringify (rand-coll)))
 
+(defn random-reader [^String s]
+  (let [in (StringReader. s)]
+    (proxy [FilterReader] [in]
+      (read [buf off len]
+        (.read in buf off (+ 1 (rand-int len)))))))
+
 (defspec reader-should-not-break
   (fn [str]
-    (edn/read-string {:buffer 10} str))
+    (edn/read {:buffer 10} (random-reader str)))
   [^{:tag fast-edn.buf-test/rand-str} str]
   (when-not (= (clojure.edn/read-string str) %)
     (throw (ex-info "Value cannot roundtrip, see ex-data" {:printed str :read %}))))
