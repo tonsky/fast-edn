@@ -93,14 +93,15 @@ public class EdnParser {
             readLen += readLenNew;
           }
         } else {
-          readGlobalPos += readLen;
           if (countLines) {
             updateLineColumn(readLen);
           }
-          readLen = reader.read(readBuf, 0, readBuf.length);
-          if (readLen >= 0) {
+          int readLenNew = reader.read(readBuf, 0, readBuf.length);
+          if (readLenNew >= 0) {
             readPos = 0;
+            readGlobalPos += readLen;
           }
+          readLen = readLenNew;
         }
       } catch (IOException e) {
         Util.sneakyThrow(e);
@@ -192,7 +193,7 @@ public class EdnParser {
       return "";
     }
 
-    int offset = readGlobalPos + (readLen == -1 ? 0 : readPos);
+    int offset = readGlobalPos + readPos;
     String position = ", offset: " + offset;
     if (countLines) {
       updateLineColumn(readPos);

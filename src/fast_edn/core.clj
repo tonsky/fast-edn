@@ -13,6 +13,13 @@
     m1
     (persistent! (reduce-kv assoc! (transient m1) m2))))
 
+(defn construct-instant
+  "Construct a java.time.Instant"
+  [years months days hours minutes seconds nanoseconds offset-sign offset-hours offset-minutes]
+  (let [zone (ZoneOffset/ofHoursMinutes (* offset-sign offset-hours) offset-minutes)]
+    (-> (ZonedDateTime/of years months days hours minutes seconds nanoseconds zone)
+      (.toInstant))))
+
 (defn construct-date
   "Construct a java.util.Date, which expresses the original instant as milliseconds since the epoch, UTC.
    Faster version of clojure.instant/construct-date"
@@ -116,8 +123,3 @@
   ([opts s]
    (when s
      (read-impl (parser opts) (StringReader. s)))))
-
-(comment
-  (read (clojure.lang.LineNumberingPushbackReader. (StringReader. "{:a 1 :b}")))
-  (read (java.io.LineNumberReader. (StringReader. "{:a 1 :b}")))
-  (read (StringReader. "{:a 1\n :b}")))
