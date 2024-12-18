@@ -22,3 +22,17 @@
 (defn -test-main [_]
   (virgil/compile-java ["src/fast_edn"])
   (duti/test-exit #"fast-edn\.(.*-)?test"))
+
+(defn -bench-json [_]
+  (virgil/compile-java ["src/fast_edn"])
+  (require 'bench)
+  (@(resolve 'bench/bench)
+   {:files   #".*\.json"
+    :parsers (keys @(resolve 'bench/json-parsers))}))
+
+(defn -bench-edn [_]
+  (virgil/compile-java ["src/fast_edn"])
+  (require 'bench)
+  (@(resolve 'bench/bench)
+   {:files   #".*\.edn"
+    :parsers (keys @(resolve 'bench/edn-parsers))}))

@@ -9,34 +9,93 @@
    [clojure.tools.reader.edn :as tools]
    [duti.core :as duti]
    [fast-edn.generators :as cgen]
-   [fast-edn.core :as edn2]
+   [fast-edn.core :as fast-edn]
    [jsonista.core :as jsonista])
   (:import
    [java.io File FileFilter]))
 
-(defn bench-json [& _]
-  (doseq [file (-> (io/file "dev/data")
-                 (.listFiles ^FileFilter #(str/ends-with? (File/.getName %) ".json"))
-                 (->> (sort-by File/.getName)))
-          :let [content (slurp file)]]
-    (duti/benching (File/.getName file)
-      (doseq [[name parse-fn] [["cheshire" #(cheshire/parse-string % keyword)]
-                               ["jsonista" #(jsonista/read-value % jsonista/keyword-keys-object-mapper)]
-                               ["charred"  (charred/parse-json-fn {:key-fn keyword})]]]
-        (duti/benching name
-          (duti/bench
-            (parse-fn content)))))))
+(defn print-table [ks rows]
+  (when (seq rows)
+    (let [widths (map
+                   (fn [k]
+                     (apply max (count (str k)) (map #(count (str (get % k))) rows)))
+                   ks)
+          spacers (map #(apply str (repeat % "─")) widths)
+          fmts (map #(str "%" % "s") widths)
+          fmt-row (fn [leader divider trailer row]
+                    (str leader
+                      (apply str (interpose divider
+                                   (for [[col fmt] (map vector (map #(get row %) ks) fmts)]
+                                     (format fmt (str col)))))
+                      trailer))]
+      (println (fmt-row "┌─" "─┬─" "─┐" (zipmap ks spacers)))
+      (println (fmt-row "│ " " │ " " │" (zipmap ks ks)))
+      (println (fmt-row "├─" "─┼─" "─┤" (zipmap ks spacers)))
+      (doseq [row rows]
+        (println (fmt-row "│ " " │ " " │" row)))
+      (println (fmt-row "└─" "─┴─" "─┘" (zipmap ks spacers)))
+      (println))))
+
+(def json-parsers
+  {"cheshire" #(cheshire/parse-string % keyword)
+   "jsonista" #(jsonista/read-value % jsonista/keyword-keys-object-mapper)
+   "charred"  #((charred/parse-json-fn {:key-fn keyword}) %)})
+
+(def edn-parsers
+  {"clojure.edn"  edn/read-string
+   "tools.reader" tools/read-string
+   "fast-edn"     fast-edn/read-string})
+
+(def all-parsers
+  (merge json-parsers edn-parsers))
+
+(defn bench [{files-pattern :files
+              parser-names  :parsers
+              profile       :profile
+              :or {files-pattern #".*\.(json|edn)"
+                   parser-names  (keys all-parsers)
+                   profile       :quick}}]
+  (let [files        (-> (io/file "dev/data")
+                       (.listFiles ^FileFilter #(boolean (re-matches files-pattern (File/.getName %))))
+                       (->> (sort-by File/.getName)))
+        has-ext?     (fn [ext files]
+                       (some #(str/ends-with? (File/.getName %) (str "." ext)) files))
+        has-file?    (fn [parser-name files]
+                       (cond
+                         (json-parsers parser-name) (has-ext? "json" files)
+                         (edn-parsers parser-name)  (has-ext? "edn" files)))
+        parser-names (filter #(has-file? % files) parser-names)]
+    (print-table (cons "file" parser-names)
+      (doall
+        (for [file files 
+              :let [content (slurp file)
+                    rows    (duti/benching (File/.getName file)
+                              (doall
+                                (for [parser-name parser-names
+                                      :when (has-file? parser-name [file])
+                                      :let [parse-fn (all-parsers parser-name)]]
+                                  (duti/benching parser-name
+                                    [parser-name
+                                     (case profile
+                                       :quick (duti/bench {:unit "μs"} (parse-fn content))
+                                       :long  (duti/long-bench {:unit "μs"} (parse-fn content)))]))))]
+              :when (not (empty? rows))]
+          (into {"file" (File/.getName file)} rows))))))
+
 
 (comment
-  (bench-json))
+  (bench {:files #".*\.json"}))
 
-; ┌────────────────┬─────────────┬─────────────┬─────────────┬─────────────┬─────────────┐
-; │ json           │          10 │         100 │          1K │         10K │        100K │
-; ├────────────────┼─────────────┼─────────────┼─────────────┼─────────────┼─────────────┤
-; │ cheshire       │    0.548 μs │    0.985 μs │    4.288 μs │   38.888 μs │  386.009 μs │
-; │ jsonista       │    0.135 μs │    0.669 μs │    3.109 μs │   35.575 μs │  332.501 μs │
-; │ charred        │    0.087 μs │    0.427 μs │    2.479 μs │   32.974 μs │  326.401 μs │
-; └────────────────┴─────────────┴─────────────┴─────────────┴─────────────┴─────────────┘
+; ┌──────────────────┬────────────┬────────────┬────────────┐
+; │             file │   cheshire │   jsonista │    charred │
+; ├──────────────────┼────────────┼────────────┼────────────┤
+; │     json_10.json │   0.606 μs │   0.149 μs │   0.320 μs │
+; │    json_100.json │   1.082 μs │   0.616 μs │   0.726 μs │
+; │   json_1000.json │   4.345 μs │   3.025 μs │   2.981 μs │
+; │  json_10000.json │  38.877 μs │  34.893 μs │  32.376 μs │
+; │ json_100000.json │ 383.107 μs │ 336.559 μs │ 310.726 μs │
+; └──────────────────┴────────────┴────────────┴────────────┘
+
 
 (defn gen-edn-basic []
   (doseq [file (-> (io/file "dev/data")
@@ -48,6 +107,20 @@
 
 (comment
   (gen-edn-basic))
+
+(comment
+  (bench {:files #"edn_basic_\d+\.edn"}))
+
+; ┌──────────────────────┬─────────────┬──────────────┬────────────┐
+; │                 file │ clojure.edn │ tools.reader │   fast-edn │
+; ├──────────────────────┼─────────────┼──────────────┼────────────┤
+; │     edn_basic_10.edn │    0.500 μs │     0.468 μs │   0.282 μs │
+; │    edn_basic_100.edn │    3.011 μs │     3.520 μs │   0.561 μs │
+; │   edn_basic_1000.edn │   19.006 μs │    30.877 μs │   2.794 μs │
+; │  edn_basic_10000.edn │  220.692 μs │   380.497 μs │  33.001 μs │
+; │ edn_basic_100000.edn │ 2102.978 μs │  3626.522 μs │ 316.593 μs │
+; └──────────────────────┴─────────────┴──────────────┴────────────┘
+
 
 (defn gen-edn-nested
   ([]
@@ -67,36 +140,15 @@
   (let [s (with-out-str
             (clojure.pprint/pprint (gen-edn-nested)))]
     (spit (io/file "dev/data/edn_nested_100000.edn") s)
-    (count s)))
+    (count s))
+  (bench {:files #"edn_nested_\d+\.edn"}))
 
-(defn bench-edn [{pattern :pattern
-                  profile :profile
-                  :or {pattern #".*\.edn"
-                       profile :quick}}]
-  (doseq [file (-> (io/file "dev/data")
-                 (.listFiles ^FileFilter #(boolean (re-matches pattern (File/.getName %))))
-                 (->> (sort-by File/.getName)))
-          :let [content (slurp file)]]
-    (duti/benching (File/.getName file)
-      (doseq [[name parse-fn] [#_["clojure.edn" edn/read-string]
-                               #_["tools.reader" tools/read-string]
-                               ["fast-edn" edn2/read-string]]]
-        (duti/benching name
-          (case profile
-            :quick (duti/bench (parse-fn content))
-            :long  (duti/long-bench (parse-fn content))))))))
+; ┌───────────────────────┬─────────────┬──────────────┬────────────┐
+; │                  file │ clojure.edn │ tools.reader │   fast-edn │
+; ├───────────────────────┼─────────────┼──────────────┼────────────┤
+; │ edn_nested_100000.edn │ 2642.004 μs │  3491.357 μs │ 449.958 μs │
+; └───────────────────────┴─────────────┴──────────────┴────────────┘
 
-(comment
-  (bench-edn {:pattern #"edn_basic_\d+\.edn"})
-  (bench-edn {:pattern #"edn_basic_10000\.edn"})) ;; 41.7 μs / 41.643379 μs
-
-; ┌────────────────┬─────────────┬─────────────┬─────────────┬─────────────┬─────────────┐
-; │ edn_basic      │          10 │         100 │          1K │         10K │        100K │
-; ├────────────────┼─────────────┼─────────────┼─────────────┼─────────────┼─────────────┤
-; │ clojure.edn    │    0.471 μs │    2.684 μs │   16.808 μs │  200.455 μs │ 1911.017 μs │
-; │ tools.reader   │    0.414 μs │    3.351 μs │   28.355 μs │  433.135 μs │ 4109.846 μs │
-; │ fast-edn       │    0.222 µs │    0.598 µs │    3.578 µs │   42.295 µs │  404.197 µs │
-; └────────────────┴─────────────┴─────────────┴─────────────┴─────────────┴─────────────┘
 
 (defn rand-num ^String [max-len]
   (let [len (rand-nth (for [i (range 1 (inc max-len))
@@ -121,14 +173,14 @@
 (comment
   (gen-ints 1400)
   (duti.core/bench (fast-edn.core/read-string ints-1400))
-  (bench-edn {:pattern #"ints_1400\.edn"}))
+  (bench {:files #"ints_\d+\.edn"}))
 
-; ┌────────────────┬─────────────┐
-; │ ints           │        1400 │
-; ├────────────────┼─────────────┤
-; │ clojure.edn    │  426.189 μs │
-; │ fast-edn       │   62.529 μs │
-; └────────────────┴─────────────┘
+; ┌───────────────┬─────────────┬──────────────┬───────────┐
+; │          file │ clojure.edn │ tools.reader │  fast-edn │
+; ├───────────────┼─────────────┼──────────────┼───────────┤
+; │ ints_1400.edn │  436.923 μs │   540.320 μs │ 26.449 μs │
+; └───────────────┴─────────────┴──────────────┴───────────┘
+
 
 (defn rand-string ^String []
   (str/join (repeatedly (+ 5 (rand-int 95)) #(rand-nth "abcdefghijklmnopqrstuvwxyz!?*-+<>,.: /"))))
@@ -168,60 +220,16 @@
 
 (comment
   (gen-strings 1000)
-  (let [s (slurp "dev/data/strings_1000.edn")]
-    (duti.core/bench
-      (clojure.edn/read-string s)))
-
-  (let [s1000 (slurp "dev/data/strings_1000.edn")
-        s250  (slurp "dev/data/strings_uni_250_safe.edn")]
-    (duti.core/bench (fast-edn.core/read-string s1000))
-    (duti.core/profile-times 100000 (fast-edn.core/read-string s1000))
-    (duti.core/bench (fast-edn.core/read-string s250))
-    (duti.core/profile-times 100000 (fast-edn.core/read-string s250))
-    (duti.core/bench (fast-edn.core/read-string s1000))
-    (duti.core/profile-times 100000 (fast-edn.core/read-string s1000)))
-
-
-  (do
-    (duti.core/bench (fast-edn.core/read-string strings-1000))
-    (duti.core/bench (fast-edn.core/read-string strings-250))
-    (duti.core/bench (fast-edn.core/read-string strings-1000)))
-
-  (duti.core/bench (clojure.edn/read-string strings-1000))
-  (duti.core/bench (clojure.edn/read-string strings-250))
-
-  (duti.core/long-bench (fast-edn.core/read-string strings-250))
-  (duti.core/long-bench (fast-edn.core/read-string s1000))
-
-  (fast-edn.core/read-string (slurp "dev/data/strings_1000.edn"))
-  (fast-edn.core/read-string (slurp "dev/data/strings_uni_250_safe.edn"))
-
   (gen-uni-strings 250)
-  
-  (fast-edn.core/read-string "{:a 1 :b 2 :c 3 :d 4 :e 5 :f 6 :g 7 :h 8 :i")
-  
-  ;; 1.22 μs
-  
-  (let [s (slurp "dev/data/edn_basic_100.edn")]
-    (duti.core/bench
-      (fast-edn.core/read-string {:buffer 1024} s)))
-  
-  (let [s (slurp "dev/data/edn_nested_100000.edn")
-        p (fast-edn.core/parser {:buffer 1024, :eof nil})]
-    (duti.core/bench
-      (fast-edn.core/read-impl p (java.io.StringReader. s)))
-    (duti.core/profile-for 10000
-      (fast-edn.core/read-impl p (java.io.StringReader. s))))
+  (bench {:files #"strings_.*\.edn"}))
 
-  (bench-edn {:profile :long
-              :pattern #"strings_.*"}))
+; ┌─────────────────────┬─────────────┬──────────────┬───────────┐
+; │                file │ clojure.edn │ tools.reader │  fast-edn │
+; ├─────────────────────┼─────────────┼──────────────┼───────────┤
+; │    strings_1000.edn │  653.714 μs │  2071.018 μs │ 41.417 μs │
+; │ strings_uni_250.edn │  642.935 μs │  1285.644 μs │ 99.924 μs │
+; └─────────────────────┴─────────────┴──────────────┴───────────┘
 
-; ┌────────────────┬─────────────┬─────────────┐
-; │ strings        │        1000 │     uni_250 │
-; ├────────────────┼─────────────┼─────────────┤
-; │ clojure.edn    │  670.574 μs │  668.553 μs │
-; │ fast-edn       │   47.531 μs │   131.72 μs │
-; └────────────────┴─────────────┴─────────────┘
 
 (defn gen-keywords [cnt]
   (let [kw-fn (fn [] (str/join (repeatedly (+ 1 (rand-int 10)) #(rand-nth "abcdefghijklmnopqrstuvwxyz!?*-+<>"))))
@@ -244,36 +252,40 @@
 
 (comment
   (doseq [n (range 10 100 1000 10000)]
-    (gen-keywords 10))
-  (bench-edn {:pattern #"edn_basic_100000\.edn"})
-  (bench-edn {:pattern #"edn_nested.*\.edn"})
-  (let [s (slurp "dev/data/edn_nested_100000.edn")]
-    (duti.core/bench
-      (fast-edn.core/read-string {:count-lines false} s)))
-  (bench-edn {:pattern #".*\.edn"}))
+    (gen-keywords n))
+  (bench {:files #"keywords.*\.edn"}))
 
-;                    53673a3   d715795   38e48ac   7cc4e77   a8b46be   40e8d6b   
-;                    -------   -------   -------   -------   -------   -------   -------
-; edn_basic_10         0.115     0.122     0.668     0.289     0.278     0.270     0.276
-; edn_basic_100        0.548     0.528     1.019     0.669     0.617     0.529     0.540
-; edn_basic_1000       3.125     3.178     4.022     2.913     2.958     2.840     2.614
-; edn_basic_10000     40.650    39.409    42.018    40.775    38.801    36.320    35.388
-; edn_basic_100000   397.643   376.625   401.514   398.696   369.616   345.574   340.148
-; edn_nested_100000                                904.766   476.696   444.262   448.725
-; ints_1400           35.974    30.800    30.236    32.013    30.545    28.973    31.262
-; keywords_10          0.641     0.639     1.153     0.741     0.630     0.636     0.672
-; keywords_100         5.720     5.730     6.178     5.462     5.031     4.976     5.037
-; keywords_1000       66.411    62.685    66.299    61.439    57.294    54.434    56.311
-; keywords_10000     820.167   807.494   796.849   781.260   644.352   658.832   670.739
-; strings_1000        43.875    44.212    43.315    41.988    42.111    43.193    46.187
-; strings_uni_250    120.249   117.282   108.563   113.033   102.445   100.186   108.555
+; ┌────────────────────┬─────────────┬──────────────┬────────────┐
+; │               file │ clojure.edn │ tools.reader │   fast-edn │
+; ├────────────────────┼─────────────┼──────────────┼────────────┤
+; │    keywords_10.edn │    3.996 μs │     4.925 μs │   0.638 μs │
+; │   keywords_100.edn │   35.838 μs │    41.746 μs │   4.967 μs │
+; │  keywords_1000.edn │  376.494 μs │   443.671 μs │  55.693 μs │
+; │ keywords_10000.edn │ 4338.960 μs │  5352.647 μs │ 666.295 μs │
+; └────────────────────┴─────────────┴──────────────┴────────────┘
 
-; ┌────────────────┬─────────────┬─────────────┬─────────────┬─────────────┐
-; │ keywords       │          10 │         100 │        1000 │       10000 │
-; ├────────────────┼─────────────┼─────────────┼─────────────┼─────────────┤
-; │ clojure.edn    │             │             │  372.045 μs │             │
-; │ fast-edn       │    0.638 µs │    5.733 µs │   65.429 μs │  802.938 µs │
-; └────────────────┴─────────────┴─────────────┴─────────────┴─────────────┘
+
+(comment
+  (bench {:files #".*\.edn" :parsers ["fast-edn"]}))
+
+; ┌───────────────────────┬─────────┬─────────┬─────────┬─────────┬─────────┬─────────┬─────────┬─────────┐
+; │                  file │ 53673a3 │ d715795 │ 38e48ac │ 7cc4e77 │ a8b46be │ 40e8d6b │ 70e85ec │         │
+; ├───────────────────────┼─────────┼─────────┼─────────┼─────────┼─────────┼─────────┼─────────┼─────────┤
+; │      edn_basic_10.edn │   0.115 │   0.122 │   0.668 │   0.289 │   0.278 │   0.270 │   0.276 │   0.283 │
+; │     edn_basic_100.edn │   0.548 │   0.528 │   1.019 │   0.669 │   0.617 │   0.529 │   0.540 │   0.556 │
+; │    edn_basic_1000.edn │   3.125 │   3.178 │   4.022 │   2.913 │   2.958 │   2.840 │   2.614 │   2.795 │
+; │   edn_basic_10000.edn │  40.650 │  39.409 │  42.018 │  40.775 │  38.801 │  36.320 │  35.388 │  36.819 │
+; │  edn_basic_100000.edn │ 397.643 │ 376.625 │ 401.514 │ 398.696 │ 369.616 │ 345.574 │ 340.148 │ 352.318 │
+; │ edn_nested_100000.edn │         │         │         │ 904.766 │ 476.696 │ 444.262 │ 448.725 │ 458.325 │
+; │         ints_1400.edn │  35.974 │  30.800 │  30.236 │  32.013 │  30.545 │  28.973 │  31.262 │  26.253 │
+; │       keywords_10.edn │   0.641 │   0.639 │   1.153 │   0.741 │   0.630 │   0.636 │   0.672 │   0.639 │
+; │      keywords_100.edn │   5.720 │   5.730 │   6.178 │   5.462 │   5.031 │   4.976 │   5.037 │   4.954 │
+; │     keywords_1000.edn │  66.411 │  62.685 │  66.299 │  61.439 │  57.294 │  54.434 │  56.311 │  55.976 │
+; │    keywords_10000.edn │ 820.167 │ 807.494 │ 796.849 │ 781.260 │ 644.352 │ 658.832 │ 670.739 │ 667.226 │
+; │      strings_1000.edn │  43.875 │  44.212 │  43.315 │  41.988 │  42.111 │  43.193 │  46.187 │  43.640 │
+; │   strings_uni_250.edn │ 120.249 │ 117.282 │ 108.563 │ 113.033 │ 102.445 │ 100.186 │ 108.555 │  93.131 │
+; └───────────────────────┴─────────┴─────────┴─────────┴─────────┴─────────┴─────────┴─────────┴─────────┘
+
 
 (comment
   (duti.core/bench
