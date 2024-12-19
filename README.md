@@ -2,7 +2,7 @@
 
 > EDN format is very similar to JSON, thus it should parse as fast as JSON.
 
-Fast EDN is an EDN parser that is roughly 6 times faster than clojure.edn:
+Fast EDN is a drop-in replacement for clojure.edn that is roughly 6 times faster:
 
 | Test file         | clojure.edn | fast-edn.core | speed up, times |
 | :---              |        ---: |          ---: |            ---: |
@@ -40,7 +40,7 @@ Speed of EDN parsing makes Transit obsolete:
 | basic_10000  |     211.536 |         125.741 |       46.849 |     38.214 |
 | basic_100000 |    2016.885 |        1167.972 |      447.013 |    363.691 |
 
-All execution times above are in µs, M1 Pro CPU, JDK Zulu23.30+13-CA.
+All execution times above are in µs, M1 Pro 16 Gb, single thread, JDK Zulu23.30+13-CA.
 
 To run benchmarks yourself:
 
@@ -48,6 +48,57 @@ To run benchmarks yourself:
 ./script/bench_json.sh
 ./script/bench_edn.sh
 ./script/bench_transit.sh
+```
+
+## Other benefits
+
+Fast EDN has more consistent error reporting. Clojure:
+
+```
+#_(clojure.edn/read-string "1a")
+; => NumberFormatException: Invalid number: 1a
+
+#_(clojure.edn/read-string "{:a 1 :b")
+; => RuntimeException: EOF while reading
+
+#_(clojure.edn/read-string "\"{:a 1 :b")
+; => RuntimeException: EOF while reading string
+
+#_(clojure.edn/read-string "\"\\u123\"")
+; => IllegalArgumentException: Invalid character length: 3, should be: 4
+```
+
+Fast EDN includes location information in exceptions:
+
+```
+#_(fast-edn.core/read-string "1a")
+; => NumberFormatException: For input string: "1a", offset: 2, context:
+;    1a
+;     ^
+
+#_(fast-edn.core/read-string "{:a 1 :b")
+; => RuntimeException: Map literal must contain an even number of forms: {:a 1, :b, offset: 8, context:
+;    {:a 1 :b
+;           ^
+
+#_(fast-edn.core/read-string "\"{:a 1 :b")
+; => RuntimeException: EOF while reading string: "{:a 1 :b, offset: 9, context:
+;    "{:a 1 :b
+;            ^
+
+#_(fast-edn.core/read-string "\"\\u123\"")
+; => RuntimeException: Unexpected digit: ", offset: 7, context:
+;    "\u123"
+;          ^
+```
+
+Optionally, you can include line number/column information at the cost of a little performance:
+
+```clojure
+(read-string {:count-lines true} "\"abc")
+; => RuntimeException: EOF while reading string: "abc, line: 1, column: 5, offset: 4, context:
+;    "abc
+;       ^
 ```
 
 ## Using
@@ -82,25 +133,11 @@ In addition, `fast-edn.core/read` directly supports `InputStream`, `File`, `byte
 (edn/read (io/file "data.edn"))
 ```
 
-There’s also an option to report line number/column instead of offset if parsing fails (at the cost of a little performance):
-
-```clojure
-(read-string "\"abc")
-; => RuntimeException: EOF while reading string: "abc, offset: 4, context:
-;    "abc
-;       ^
-
-(read-string {:count-lines true} "\"abc")
-; => RuntimeException: EOF while reading string: "abc, line: 1, column: 5, offset: 4, context:
-;    "abc
-;       ^
-```
-
 ## Compatibility
 
 Fast EDN is 100% compatible with clojure.edn. It will read everything that clojure.edn would.
 
-Most cases that clojure.edn rejects, Fast EDN will reject too. There are some exceptions though: Fast EDN is a tiny bit more permissive than clojure.edn. We tried to follow intent and just simplify/streamline edge cases where it made sense.
+Most cases that clojure.edn rejects, Fast EDN will reject too. There are some minor exceptions though: Fast EDN is a tiny bit more permissive than clojure.edn. We tried to follow intent and just simplify/streamline edge cases where it made sense.
 
 In Fast EDN, ratios can be specified with arbitrary integers:
 
@@ -150,9 +187,21 @@ We also support vectors in metadata since Clojure supports them and EDN parser w
 
 According to [github.com/edn-format/edn](https://github.com/edn-format/edn), metadata should not be handled by EDN at all, but `clojure.edn` supports it and so are we.
 
-## Testing
+## Test coverage
 
 Fast EDN is extensively tested by test suite from clojure.core, by our own generative test suite and by a set of hand-crafted test cases.
+
+To run tests yourself:
+
+```sh
+./script/test.sh
+```
+
+## Appreciation
+
+- [charred](https://github.com/cnuernber/charred) for starting point
+- [clj-async-profiler](https://github.com/clojure-goes-fast/clj-async-profiler) and
+[criterium](https://github.com/hugoduncan/criterium/) for providing the tools
 
 ## License
 

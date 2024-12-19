@@ -72,7 +72,7 @@
   [^EdnParser parser ^Reader reader]
   (-> parser
     (.withReader reader)
-    (.readObject)))
+    (.readObjectOuter)))
 
 (defn read
   "Reads the next object from source (*in* by default).
