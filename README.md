@@ -1,42 +1,44 @@
 # Fast EDN parser
 
+> EDN format is very similar to JSON, thus it should parse as fast as JSON.
+
 Fast EDN is an EDN parser that is roughly 6 times faster than clojure.edn:
 
-| Test file             | clojure.edn | fast-edn.core | speed up, times |
-| :---                  |        ---: |          ---: |            ---: |
-| edn_basic_10.edn      |       0.504 |         0.277 |          ×  1.8 |
-| edn_basic_100.edn     |       3.040 |         0.534 |          ×  5.7 |
-| edn_basic_1000.edn    |      19.495 |         2.733 |          ×  7.1 |
-| edn_basic_10000.edn   |     221.773 |        36.887 |          ×  6.0 |
-| edn_basic_100000.edn  |    2138.255 |       356.772 |          ×  6.0 |
-| edn_nested_100000.edn |    2585.372 |       441.200 |          ×  5.9 |
-| ints_1400.edn         |     431.432 |        27.000 |          × 16.0 |
-| keywords_10.edn       |       3.961 |         0.634 |          ×  6.2 |
-| keywords_100.edn      |      34.980 |         4.848 |          ×  7.2 |
-| keywords_1000.edn     |     369.404 |        53.942 |          ×  6.8 |
-| keywords_10000.edn    |    4168.732 |       654.090 |          ×  6.4 |
-| strings_1000.edn      |     651.043 |        42.335 |          × 15.4 |
-| strings_uni_250.edn   |     641.900 |       102.268 |          ×  6.3 |
+| Test file         | clojure.edn | fast-edn.core | speed up, times |
+| :---              |        ---: |          ---: |            ---: |
+| basic_10          |       0.504 |         0.277 |          ×  1.8 |
+| basic_100         |       3.040 |         0.534 |          ×  5.7 |
+| basic_1000        |      19.495 |         2.733 |          ×  7.1 |
+| basic_10000       |     221.773 |        36.887 |          ×  6.0 |
+| basic_100000      |    2138.255 |       356.772 |          ×  6.0 |
+| nested_100000     |    2585.372 |       441.200 |          ×  5.9 |
+| ints_1400         |     431.432 |        27.000 |          × 16.0 |
+| keywords_10       |       3.961 |         0.634 |          ×  6.2 |
+| keywords_100      |      34.980 |         4.848 |          ×  7.2 |
+| keywords_1000     |     369.404 |        53.942 |          ×  6.8 |
+| keywords_10000    |    4168.732 |       654.090 |          ×  6.4 |
+| strings_1000      |     651.043 |        42.335 |          × 15.4 |
+| strings_uni_250   |     641.900 |       102.268 |          ×  6.3 |
 
 Fast EDN achieves JSON parsing speeds (json + keywordize keys vs EDN of the same size):
 
-| File size | cheshire | jsonista | charred | fast-edn |
-| :---      |     ---: |     ---: |    ---: |      --: |
-| 10        |    0.588 |    0.137 |   0.328 |    0.277 |
-| 100       |    1.043 |    0.594 |   0.721 |    0.534 |
-| 1K        |    4.224 |    2.999 |   3.016 |    2.733 |
-| 10K       |   37.793 |   34.374 |  32.623 |   36.887 |
-| 100K      |  359.558 |  327.997 | 313.280 |  356.772 |
+| File size    | cheshire | jsonista | charred | fast-edn |
+| :---         |     ---: |     ---: |    ---: |      --: |
+| basic_10     |    0.588 |    0.137 |   0.328 |    0.277 |
+| basic_100    |    1.043 |    0.594 |   0.721 |    0.534 |
+| basic_1000   |    4.224 |    2.999 |   3.016 |    2.733 |
+| basic_10000  |   37.793 |   34.374 |  32.623 |   36.887 |
+| basic_100000 |  359.558 |  327.997 | 313.280 |  356.772 |
 
-We also ship with `#inst` parser that is up to 15 times faster:
+Speed of EDN parsing makes Transit obsolete:
 
-```
-Benchmarking (clojure.instant/read-instant-date "2024-12-17T15:54:00.000+01:00")
-└╴Mean time: 1.553710 µs, alloc: 4.19 KB, stddev: 25.982112 ns, calls: 64617
-
-Benchmarking (fast-edn.core/read-instant-date "2024-12-17T15:54:00.000+01:00")
-└╴Mean time: 93.173277 ns, alloc: 0.07 KB, stddev: 1.453980 ns, calls: 1041000
-```
+| file         | clojure.edn | transit+msgpack | transit+json |   fast-edn |
+| :---         |        ---: |            ---: |         ---: |       ---: |
+| basic_10     |       0.481 |           2.832 |        1.474 |      0.273 |
+| basic_100    |       2.799 |           4.242 |        2.297 |      0.527 |
+| basic_1000   |      17.548 |          14.738 |        6.583 |      2.695 |
+| basic_10000  |     211.536 |         125.741 |       46.849 |     38.214 |
+| basic_100000 |    2016.885 |        1167.972 |      447.013 |    363.691 |
 
 All execution times above are in µs, M1 Pro CPU, JDK Zulu23.30+13-CA.
 
@@ -45,6 +47,7 @@ To run benchmarks yourself:
 ```sh
 ./script/bench_json.sh
 ./script/bench_edn.sh
+./script/bench_transit.sh
 ```
 
 ## Using

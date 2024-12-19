@@ -36,3 +36,12 @@
   (@(resolve 'bench/bench)
    {:files   #".*\.edn"
     :parsers (keys @(resolve 'bench/edn-parsers))}))
+
+(defn -bench-transit [_]
+  (virgil/compile-java ["src/fast_edn"])
+  (require 'bench)
+  (@(resolve 'bench/bench)
+   {:files   #"transit_.*"
+    :parsers (concat
+               (keys @(resolve 'bench/transit-json-parsers))
+               (keys @(resolve 'bench/transit-msgpack-parsers)))}))
