@@ -23,6 +23,7 @@ public class EdnParser {
   public int      readPos = 0;
   public int      readGlobalPos = 0;
   public int      readLen = 0;
+  public boolean  isEOF = false;
   public char[]   accumulator;
   public int      accumulatorLength;
   public Object[] arrayMapBuf = new Object[16];
@@ -48,6 +49,7 @@ public class EdnParser {
     this.readPos = 0;
     this.readGlobalPos = 0;
     this.readLen = 0;
+    this.isEOF = false;
     return this;
   }
 
@@ -82,13 +84,13 @@ public class EdnParser {
   }
 
   public void nextBuffer() {
-    if (readLen != -1) {
+    if (!isEOF) {
       try {
         // for better context() in badly buffered readers (e.g. stdin)
         if (readLen <= readBuf.length / 2) {
           int readLenNew = reader.read(readBuf, readLen, readBuf.length - readLen);
           if (readLenNew == -1) {
-            readLen = -1;
+            isEOF = true;
           } else {
             readLen += readLenNew;
           }
@@ -97,11 +99,13 @@ public class EdnParser {
             updateLineColumn(readLen);
           }
           int readLenNew = reader.read(readBuf, 0, readBuf.length);
-          if (readLenNew >= 0) {
+          if (readLenNew == -1) {
+            isEOF = true;
+          } else {
             readPos = 0;
             readGlobalPos += readLen;
+            readLen = readLenNew;
           }
-          readLen = readLenNew;
         }
       } catch (IOException e) {
         Util.sneakyThrow(e);
@@ -110,24 +114,20 @@ public class EdnParser {
   }
 
   public int read() {
-    if (readLen > readPos) {
+    if (!isEOF && readLen > readPos) {
       return readBuf[readPos++];
     }
     nextBuffer();
-    return readLen == -1 ? -1 : readBuf[readPos++];
+    return isEOF ? -1 : readBuf[readPos++];
   }
 
   public void unread() {
-    assert readPos > 0;
+    assert readPos > 0 : "Expected readPos > 0, got readPos = " + readPos;
     readPos -= 1;
   }
 
-  public boolean eof() {
-    return readLen == -1;
-  }
-
   public int skip(IntPredicate pred) {
-    while (!eof()) {
+    while (!isEOF) {
       char[] buf = readBuf;
       int    pos = readPos;
       int    len = readLen;
@@ -166,8 +166,7 @@ public class EdnParser {
   }
   
   public String context() {
-    int len = readLen == -1 ? readPos : readLen; 
-    if (len <= 0) {
+    if (readLen <= 0) {
       return "";
     }
 
@@ -181,7 +180,7 @@ public class EdnParser {
     }
 
     int end = readPos;
-    for (; end < Math.min(len, readPos + 100); ++end) {
+    for (; end < Math.min(readLen, readPos + 100); ++end) {
       int ch = readBuf[end];
       if (ch == '\n' || ch == '\r') {
         end = Math.max(end - 1, readPos);
@@ -326,7 +325,7 @@ public class EdnParser {
     accumulatorAppend(buf, start, pos);
 
     outer:
-    while (!eof()) {
+    while (!isEOF) {
       buf     = readBuf;
       start   = readPos;
       pos     = start;
@@ -460,7 +459,7 @@ public class EdnParser {
     }
 
     outer:
-    while (!eof()) {
+    while (!isEOF) {
       buf     = readBuf;
       start   = readPos;
       pos     = start;
@@ -586,7 +585,7 @@ public class EdnParser {
     }
 
     outer:
-    while (!eof()) {
+    while (!isEOF) {
       buf     = readBuf;
       start   = readPos;
       pos     = start;
@@ -674,7 +673,7 @@ public class EdnParser {
     int     radixPos = -1;
 
     outer:
-    while (!eof()) {
+    while (!isEOF) {
       buf     = readBuf;
       start   = readPos;
       pos     = start;
@@ -825,7 +824,7 @@ public class EdnParser {
   public IPersistentList readList() {
     ArrayList acc = new ArrayList();
 
-    while (!eof()) {
+    while (!isEOF) {
       int ch = skipWhitespace();
 
       if (ch == ')') {
@@ -853,7 +852,7 @@ public class EdnParser {
   public PersistentVector readVector() {
     ITransientCollection acc = PersistentVector.EMPTY.asTransient();
 
-    while (!eof()) {
+    while (!isEOF) {
       int ch = skipWhitespace();
 
       if (ch == ']') {
@@ -878,7 +877,7 @@ public class EdnParser {
     ATransientSet acc = (ATransientSet) PersistentHashSet.EMPTY.asTransient();
     int count = 0;
 
-    while (!eof()) {
+    while (!isEOF) {
       int ch = skipWhitespace();
 
       if (ch == '}') {
@@ -906,7 +905,7 @@ public class EdnParser {
 
   public IPersistentMap readMap(String ns) {
     int len = 0;
-    while (!eof()) {
+    while (!isEOF) {
       int ch = skipWhitespace();
 
       if (ch == '}') {
@@ -965,7 +964,7 @@ public class EdnParser {
       }
     }
 
-    while (!eof()) {
+    while (!isEOF) {
       int ch = skipWhitespace();
 
       if (ch == '}') {
