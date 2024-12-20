@@ -30,7 +30,7 @@ Fast EDN achieves JSON parsing speeds (json + keywordize keys vs EDN of the same
 | basic_10000  |   37.793 |   34.374 |  32.623 |   36.887 |
 | basic_100000 |  359.558 |  327.997 | 313.280 |  356.772 |
 
-Speed of EDN parsing makes Transit obsolete:
+Speed of EDN parsing makes Transit obsolete on JVM:
 
 | file         | clojure.edn | transit+msgpack | transit+json |   fast-edn |
 | :---         |        ---: |            ---: |         ---: |       ---: |
