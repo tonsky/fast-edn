@@ -1,9 +1,50 @@
 (ns fast-edn.test
   (:require
    [fast-edn.core :as edn]
+   [clojure.java.io :as io]
    [clojure.string :as str]
    [clojure.test :refer [is are deftest testing]]))
 
+(deftest read-next-test
+  (let [reader (java.io.StringReader. "{:a 1}{:b 2}")
+        parser (edn/parser reader)]
+    (is (= {:a 1} (edn/read-next parser)))
+    (is (= {:b 2} (edn/read-next parser)))
+    (is (thrown-with-msg? RuntimeException #"EOF" (edn/read-next parser))))
+  
+  (let [reader (java.io.StringReader. "{:a 1}{:b 2}")
+        parser (edn/parser {:eof ::eof} reader)]
+    (is (= {:a 1} (edn/read-next parser)))
+    (is (= {:b 2} (edn/read-next parser)))
+    (is (= ::eof (edn/read-next parser)))))
+  
+(deftest set-reader-test
+  (let [reader (java.io.StringReader. "{:a 1}")
+        parser (edn/parser reader)
+        _      (is (= {:a 1} (edn/read-next parser)))
+        reader (java.io.StringReader. "{:b 2}")
+        _      (edn/set-reader parser reader)
+        _      (is (= {:b 2} (edn/read-next parser)))]))
+  
+(deftest read-once-test
+  (let [reader (java.io.StringReader. "{:a 1}{:b 2}")]
+    (is (= {:a 1} (edn/read-once reader))))
+  
+  (let [source (io/input-stream "test/fast_edn/edn.edn")]
+    (is (= {:a 1} (edn/read-once source))))
+  
+  (let [source (io/file "test/fast_edn/edn.edn")]
+    (is (= {:a 1} (edn/read-once source))))
+  
+  (let [source (.getBytes "{:a 1}")]
+    (is (= {:a 1} (edn/read-once source))))
+  
+  (let [source (.toCharArray "{:a 1}")]
+    (is (= {:a 1} (edn/read-once source))))
+  
+  (let [source "{:a 1}"]
+    (is (= {:a 1} (edn/read-once source)))))
+  
 (deftest basics-test
   (are [s v] (= v (edn/read-string s))
     ""    nil
@@ -40,6 +81,7 @@
     "#{1 2"      Exception #"EOF while reading set"
     "#{1 2 1}"   Exception #"Duplicate key: 1"
     "#"          Exception #"EOF while reading dispatch macro"))
+
 
 (deftest tokens-test
   (are [s e] (= e (edn/read-string s))

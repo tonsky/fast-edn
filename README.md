@@ -2,7 +2,7 @@
 
 > EDN format is very similar to JSON, thus it should parse as fast as JSON.
 
-Fast EDN is a drop-in replacement for clojure.edn that is roughly 6 times faster:
+Fast EDN is a drop-in replacement for `clojure.edn/read-string` that is roughly 6 times faster:
 
 | Test file         | clojure.edn | fast-edn.core | speed up, times |
 | :---              |        ---: |          ---: |            ---: |
@@ -106,10 +106,10 @@ Optionally, you can include line number/column information at the cost of a litt
 Add this to `deps.edn`:
 
 ```clojure
-io.github.tonsky/fast-edn {:mvn/version "1.0.0"}
+io.github.tonsky/fast-edn {:mvn/version "1.1.0"}
 ```
 
-API is a drop-in replacement for `clojure.edn`:
+`read-string` works exactly the same as in `clojure.edn`:
 
 ```clojure
 (require '[fast-edn.core :as edn])
@@ -117,20 +117,36 @@ API is a drop-in replacement for `clojure.edn`:
 ;; Read from string
 (edn/read-string "{:a 1}")
 
-;; Read from java.io.Reader
-(edn/read (FileReader. "data.edn"))
-
 ;; Options
-(edn/read {:eof     ::eof
-           :readers {'inst #(edn/parse-timestamp edn/construct-instant %)}
-           :default (fn [tag value]
-                      (clojure.core/tagged-literal tag value))})
+(edn/read-string
+  {:eof     ::eof
+   :readers {'inst #(edn/parse-timestamp edn/construct-instant %)}
+   :default (fn [tag value]
+              (clojure.core/tagged-literal tag value))})
 ```
 
-In addition, `fast-edn.core/read` directly supports `InputStream`, `File`, `byte[]`, `char[]` and `String`:
+In addition to strings, `fast-edn.core/read-once` allows you to read from `InputStream`, `File`, `byte[]`, `char[]` and `String`:
 
 ```clojure
-(edn/read (io/file "data.edn"))
+(edn/read-once (io/file "data.edn"))
+```
+
+Note that `read-once` closes the Reader/InputStream you pass to it, so it’s not a direct analogue of `clojure.edn/read`.
+
+Consuming multiple sequential objects from the same Reader/InputStream is possible but looks slightly different. In Clojure:
+
+```
+(let [r (java.io.PushbackReader. reader)]
+  (take-while #(not= ::eof %)
+    (repeatedly #(clojure.edn/read {:eof ::eof} r))))
+```
+
+In Fast EDN:
+
+```
+(let [p (fast-edn.core/parser {:eof ::eof} reader)]
+  (take-while #(not= ::eof %)
+    (repeatedly #(fast-edn.core/read-next p))))
 ```
 
 ## Compatibility
@@ -196,6 +212,13 @@ To run tests yourself:
 ```sh
 ./script/test.sh
 ```
+
+## What’s the secret?
+
+Fast EDN achieves its speed mainly by avoiding two things clojure.edn does:
+
+- reading from Reader one char at a time,
+- using regexps.
 
 ## Appreciation
 

@@ -18,21 +18,21 @@ public class EdnParser {
   public final boolean throwOnEOF;
   public final Object  eofValue;
 
-  public Reader   reader = null;
   public char[]   readBuf;
-  public int      readPos = 0;
-  public int      readGlobalPos = 0;
-  public int      readLen = 0;
-  public boolean  isEOF = false;
   public char[]   accumulator;
   public int      accumulatorLength;
   public Object[] arrayMapBuf = new Object[16];
 
-  public int      line = 0;
-  public int      column = 0;
-  public boolean  skipLF = false;
+  public Reader   reader;
+  public int      readPos;
+  public int      readGlobalPos;
+  public int      readLen;
+  public boolean  isEOF;
+  public int      line;
+  public int      column;
+  public boolean  skipLF;
 
-  public EdnParser(boolean countLines, int bufferSize, ILookup dataReaders, IFn defaultDataReader, boolean throwOnEOF, Object eofValue) {
+  public EdnParser(boolean countLines, int bufferSize, ILookup dataReaders, IFn defaultDataReader, boolean throwOnEOF, Object eofValue, Reader reader) {
     this.countLines = countLines;
     this.dataReaders = dataReaders;
     this.defaultDataReader = defaultDataReader;
@@ -42,14 +42,20 @@ public class EdnParser {
     this.readBuf = new char[bufferSize];
     this.accumulator = new char[32];
     this.accumulatorLength = 0;
+    
+    setReader(reader);
   }
 
-  public EdnParser withReader(Reader reader) {
+  public EdnParser setReader(Reader reader) {
     this.reader = reader;
     this.readPos = 0;
     this.readGlobalPos = 0;
     this.readLen = 0;
     this.isEOF = false;
+
+    this.line = 0;
+    this.column = 0;
+    this.skipLF = false;
     return this;
   }
 
@@ -1049,7 +1055,7 @@ public class EdnParser {
   // readObject //
   ////////////////
 
-  public Object readObjectOuter() {
+  public Object readNext() {
     try {
       return readObject(throwOnEOF);
     } catch (Exception e) {

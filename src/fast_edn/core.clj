@@ -52,52 +52,77 @@
     File        (FileReader. ^File source)
     byte/1      (InputStreamReader. (ByteArrayInputStream. source))
     char/1      (CharArrayReader. source)
-    
-    (throw (ex-info (str "Expected Reader, InputStream, File, byte[], char[] or String, got: " (class source)) {:source source}))))
+    #_else      (throw (ex-info (str "Expected Reader, InputStream, File, byte[], char[] or String, got: " (class source)) {:source source}))))
 
 (defn parser
-  "Creates a parser that can be reused in `read-impl` in case you need
-   to parse a lot of small EDNs. Not thread-safe"
-  ^EdnParser [opts]
-  (EdnParser.
-    (boolean (:count-lines opts false))
-    (:buffer opts 1024)
-    (merge default-data-readers (:readers opts))
-    (:default opts)
-    (not (contains? opts :eof))
-    (:eof opts)))
-
-(defn read-impl
-  "Read method that can reuse EdnParser created in `parser`"
-  [^EdnParser parser ^Reader reader]
-  (-> parser
-    (.withReader reader)
-    (.readObjectOuter)))
-
-(defn read
-  "Reads the next object from source (*in* by default).
+  "Creates a parser that can be reused. Useful for performance optimisations
+   (together with `set-reader`) or for reading multiple objects from same Reader.
    
    Source can be Reader, InputStream, File, byte[], char[], String.
-
-   Reads data in the EDN format: https://github.com/edn-format/edn
-
+   
    opts is a map that can include the following keys:
   
-     :eof         - Value to return on end-of-file. When not supplied, eof
-                    throws an exception.
+     :eof         - Value to return on end-of-file. When not supplied, eof throws
+                    an exception.
      :readers     - A map of tag symbol -> data-reader fn to be considered
                     before default-data-readers
-     :default     - A function of two args, that will, if present and no reader
-                    is found for a tag, be called with the tag and the value
+     :default     - A function of two args, that will, if present and no reader is
+                    found for a tag, be called with the tag and the value
      :buffer      - Int, size of buffer to read from source (1024 by default)
      :count-lines - Boolean, whether to report line/column numbers in exceptions
                     (false by default)"
-  ([]
-   (read *in*))
   ([source]
-   (read {} source))
+   (EdnParser. false 1024 default-data-readers nil true nil (reader source)))
   ([opts source]
-   (read-impl (parser opts) (reader source))))
+   (EdnParser.
+     (boolean (:count-lines opts false))
+     (:buffer opts 1024)
+     (merge default-data-readers (:readers opts))
+     (:default opts)
+     (not (contains? opts :eof))
+     (:eof opts)
+     (reader source))))
+
+(defn set-reader
+  "Reuses parser with all its options and allocated buffers.
+   
+   Source can be Reader, InputStream, File, byte[], char[], String."
+  [^EdnParser parser source]
+  (.setReader parser (reader source)))
+
+(defn read-next
+  "For cases when you need to read multiple objects from the same Reader:
+   
+     (let [p (parser {:eof ::eof} reader)]
+       (while (not= ::eof (read-next p))))"
+  [^EdnParser parser]
+  (.readNext parser))
+
+(defn read-once
+  "Reads one object from source. Source can be Reader, InputStream, File,
+   byte[], char[], String. Closes source afterwards. Throws if empty.
+   
+   Source can be Reader, InputStream, File, byte[], char[], String.
+   
+   opts is a map that can include the following keys:
+  
+     :eof         - Value to return on end-of-file. When not supplied, eof throws
+                    an exception.
+     :readers     - A map of tag symbol -> data-reader fn to be considered
+                    before default-data-readers
+     :default     - A function of two args, that will, if present and no reader is
+                    found for a tag, be called with the tag and the value
+     :buffer      - Int, size of buffer to read from source (1024 by default)
+     :count-lines - Boolean, whether to report line/column numbers in exceptions
+                    (false by default)"
+  ([source]
+   (with-open [reader (reader source)]
+     (-> (EdnParser. false 1024 default-data-readers nil false nil reader)
+       (.readNext))))
+  ([opts source]
+   (with-open [reader (reader source)]
+     (-> ^EdnParser (parser opts reader)
+       (.readNext)))))
 
 (defn read-string
   "Reads one object from the string s. Returns nil when s is nil or empty.
@@ -117,9 +142,9 @@
                     (false by default)"
   ([s]
    (when s
-     (read-impl
-       (EdnParser. false 1024 default-data-readers nil false nil)
-       (StringReader. s))))
+     (-> (EdnParser. false 1024 default-data-readers nil false nil (StringReader. s))
+       (.readNext))))
   ([opts s]
    (when s
-     (read-impl (parser opts) (StringReader. s)))))
+     (-> ^EdnParser (parser opts (StringReader. s))
+       (.readNext)))))

@@ -46,7 +46,7 @@
 
 (defspec reader-should-not-break
   (fn [str]
-    (edn/read {:buffer 10} (random-reader str)))
+    (edn/read-once {:buffer 10} (random-reader str)))
   [^{:tag fast-edn.buf-test/rand-str} str]
   (when-not (= (clojure.edn/read-string str) %)
     (throw (ex-info "Value cannot roundtrip, see ex-data" {:printed str :read %}))))
