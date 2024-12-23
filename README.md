@@ -54,39 +54,39 @@ To run benchmarks yourself:
 
 Fast EDN has more consistent error reporting. Clojure:
 
-```
-#_(clojure.edn/read-string "1a")
+```clojure
+(clojure.edn/read-string "1a")
 ; => NumberFormatException: Invalid number: 1a
 
-#_(clojure.edn/read-string "{:a 1 :b")
+(clojure.edn/read-string "{:a 1 :b")
 ; => RuntimeException: EOF while reading
 
-#_(clojure.edn/read-string "\"{:a 1 :b")
+(clojure.edn/read-string "\"{:a 1 :b")
 ; => RuntimeException: EOF while reading string
 
-#_(clojure.edn/read-string "\"\\u123\"")
+(clojure.edn/read-string "\"\\u123\"")
 ; => IllegalArgumentException: Invalid character length: 3, should be: 4
 ```
 
 Fast EDN includes location information in exceptions:
 
-```
-#_(fast-edn.core/read-string "1a")
+```clojure
+(fast-edn.core/read-string "1a")
 ; => NumberFormatException: For input string: "1a", offset: 2, context:
 ;    1a
 ;     ^
 
-#_(fast-edn.core/read-string "{:a 1 :b")
+(fast-edn.core/read-string "{:a 1 :b")
 ; => RuntimeException: Map literal must contain an even number of forms: {:a 1, :b, offset: 8, context:
 ;    {:a 1 :b
 ;           ^
 
-#_(fast-edn.core/read-string "\"{:a 1 :b")
+(fast-edn.core/read-string "\"{:a 1 :b")
 ; => RuntimeException: EOF while reading string: "{:a 1 :b, offset: 9, context:
 ;    "{:a 1 :b
 ;            ^
 
-#_(fast-edn.core/read-string "\"\\u123\"")
+(fast-edn.core/read-string "\"\\u123\"")
 ; => RuntimeException: Unexpected digit: ", offset: 7, context:
 ;    "\u123"
 ;          ^
@@ -135,7 +135,7 @@ Note that `read-once` closes the Reader/InputStream you pass to it, so it’s no
 
 Consuming multiple sequential objects from the same Reader/InputStream is possible but looks slightly different. In Clojure:
 
-```
+```clojure
 (let [r (java.io.PushbackReader. reader)]
   (take-while #(not= ::eof %)
     (repeatedly #(clojure.edn/read {:eof ::eof} r))))
@@ -143,7 +143,7 @@ Consuming multiple sequential objects from the same Reader/InputStream is possib
 
 In Fast EDN:
 
-```
+```clojure
 (let [p (fast-edn.core/parser {:eof ::eof} reader)]
   (take-while #(not= ::eof %)
     (repeatedly #(fast-edn.core/read-next p))))
