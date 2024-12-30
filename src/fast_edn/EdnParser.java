@@ -21,7 +21,6 @@ public class EdnParser {
   public char[]   readBuf;
   public char[]   accumulator;
   public int      accumulatorLength;
-  public Object[] arrayMapBuf = new Object[16];
 
   public Reader   reader;
   public int      readPos;
@@ -910,7 +909,9 @@ public class EdnParser {
   /////////////
 
   public IPersistentMap readMap(String ns) {
+    Object[] arrayMapBuf = new Object[16];
     int len = 0;
+    
     while (!isEOF) {
       int ch = skipWhitespace();
 

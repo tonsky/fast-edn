@@ -593,3 +593,19 @@
     
     ;; extras -- don't work in clojure.edn
     "^[tag] {}"   {:param-tags ['tag]} {}))
+
+(deftest issue-2
+  (let [m {:field     :field1
+           :condition {:field {:field2 "bar"}}
+           :foo1      "bar"
+           :foo2      "bar"
+           :foo3      "bar"
+           :foo4      "bar"
+           :foo5      "bar"
+           :foo6      "bar"
+           :foo7      "bar"}]
+    (is (= m (edn/read-string (pr-str m)))))
+  (let [m {:a 1
+           :b 2
+           :c {:d 3 :e 4}}]
+    (is (= m (edn/read-string (pr-str m))))))
