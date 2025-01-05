@@ -609,3 +609,13 @@
            :b 2
            :c {:d 3 :e 4}}]
     (is (= m (edn/read-string (pr-str m))))))
+
+(deftest issue-3
+  (is (= (list :a 1)
+         (edn/read-string "(:a 1 ;comment\n)")))
+  (is (= [:a 1]
+         (edn/read-string "[:a 1 ;comment\n]")))
+  (is (= #{:a 1}
+         (edn/read-string "#{:a 1 ;comment\n}")))
+  (is (= {:a 1}
+         (edn/read-string "{:a 1 ;comment\n}"))))

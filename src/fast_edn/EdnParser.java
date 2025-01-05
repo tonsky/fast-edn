@@ -830,19 +830,15 @@ public class EdnParser {
     ArrayList acc = new ArrayList();
 
     while (!isEOF) {
-      int ch = skipWhitespace();
-
-      if (ch == ')') {
+      Object o = readObjectSafe(throwOnEOF);
+      if (o instanceof UnexpectedCharacter && ((UnexpectedCharacter) o).ch == ')') {
         IPersistentList res = PersistentList.EMPTY;
         for (ListIterator i = acc.listIterator(acc.size()); i.hasPrevious(); ) {
           res = (IPersistentList) res.cons(i.previous());
         }
         return res;
-      } else if (ch == -1) {
-        break;
       } else {
-        unread();
-        acc.add(readObject());
+        acc.add(o);
       }
     }
 
@@ -858,15 +854,12 @@ public class EdnParser {
     ITransientCollection acc = PersistentVector.EMPTY.asTransient();
 
     while (!isEOF) {
-      int ch = skipWhitespace();
+      Object o = readObjectSafe(throwOnEOF);
 
-      if (ch == ']') {
+      if (o instanceof UnexpectedCharacter && ((UnexpectedCharacter) o).ch == ']') {
         return (PersistentVector) acc.persistent();
-      } else if (ch == -1) {
-        break;
       } else {
-        unread();
-        acc = acc.conj(readObject());
+        acc = acc.conj(o);
       }
     }
 
@@ -883,18 +876,14 @@ public class EdnParser {
     int count = 0;
 
     while (!isEOF) {
-      int ch = skipWhitespace();
+      Object o = readObjectSafe(throwOnEOF);
 
-      if (ch == '}') {
+      if (o instanceof UnexpectedCharacter && ((UnexpectedCharacter) o).ch == '}') {
         return (PersistentHashSet) acc.persistent();
-      } else if (ch == -1) {
-        break;
       } else {
-        unread();
-        Object key = readObject();
-        acc = (ATransientSet) acc.conj(key);
+        acc = (ATransientSet) acc.conj(o);
         if (count + 1 != acc.count()) {
-          throw new RuntimeException("Duplicate key: " + key + " reading set: " + toUnfinishedCollString(acc.persistent()) + context());
+          throw new RuntimeException("Duplicate key: " + o + " reading set: " + toUnfinishedCollString(acc.persistent()) + context());
         }
         count = count + 1;
       }
@@ -909,78 +898,16 @@ public class EdnParser {
   /////////////
 
   public IPersistentMap readMap(String ns) {
-    Object[] arrayMapBuf = new Object[16];
-    int len = 0;
-    
-    while (!isEOF) {
-      int ch = skipWhitespace();
-
-      if (ch == '}') {
-        return PersistentArrayMap.createWithCheck(Arrays.copyOf(arrayMapBuf, len));
-      } else if (ch == -1) {
-        break;
-      } else if (len >= arrayMapBuf.length) {
-        unread();
-        return readHashMap(ns, Arrays.copyOf(arrayMapBuf, len));
-      } else {
-        unread();
-        Object key = readObject();
-        if (ns != null) {
-          if (key instanceof Keyword) {
-            Keyword kw = (Keyword) key;
-            if (kw.getNamespace() == null) {
-              key = Keyword.intern(ns, kw.getName());
-            } else if (kw.getNamespace().equals("_")) {
-              key = Keyword.intern(null, kw.getName());
-            }
-          } else if (key instanceof Symbol) {
-            Symbol s = (Symbol) key;
-            if (s.getNamespace() == null) {
-              key = Symbol.intern(ns, s.getName());
-            } else if (s.getNamespace().equals("_")) {
-              key = Symbol.intern(null, s.getName());
-            }
-          }
-        }
-
-        ch = skipWhitespace();
-        if (ch == '}' || ch == -1) {
-          throw new RuntimeException("Map literal must contain an even number of forms: " + toUnfinishedCollString(PersistentArrayMap.createWithCheck(Arrays.copyOf(arrayMapBuf, len))) + ", " + key + context());
-        }
-
-        unread();
-        Object val = readObject();
-        
-        arrayMapBuf[len++] = key;
-        arrayMapBuf[len++] = val;
-      }
-    }
-    
-    throw new RuntimeException("EOF while reading map: " + toUnfinishedCollString(PersistentArrayMap.createWithCheck(Arrays.copyOf(arrayMapBuf, len))) + context());
-  }
-
-  public IPersistentMap readHashMap(String ns, Object[] init) {
     ATransientMap acc = (ATransientMap) PersistentArrayMap.EMPTY.asTransient();
     
     int count = 0;
-    for (int i = 0; i < init.length; i += 2) {
-      acc = (ATransientMap) acc.assoc(init[i], init[i + 1]);
-      count = count + 1;
-      if (acc.count() != count) {
-        throw new RuntimeException("Duplicate key: " + init[i] + " reading map: " + toUnfinishedCollString(acc.persistent()) + context());
-      }
-    }
 
     while (!isEOF) {
-      int ch = skipWhitespace();
+      Object key = readObjectSafe(throwOnEOF);
 
-      if (ch == '}') {
+      if (key instanceof UnexpectedCharacter && ((UnexpectedCharacter) key).ch == '}') {
         return acc.persistent();
-      } else if (ch == -1) {
-        break;
       } else {
-        unread();
-        Object key = readObject();
         if (ns != null) {
           if (key instanceof Keyword) {
             Keyword kw = (Keyword) key;
@@ -999,13 +926,11 @@ public class EdnParser {
           }
         }
 
-        ch = skipWhitespace();
-        if (ch == '}' || ch == -1) {
+        Object val = readObjectSafe(throwOnEOF);
+        if (val instanceof UnexpectedCharacter && ((UnexpectedCharacter) val).ch == '}') {
           throw new RuntimeException("Map literal must contain an even number of forms: " + toUnfinishedCollString(acc.persistent()) + ", " + key + context());
         }
 
-        unread();
-        Object val = readObject();
         acc = (ATransientMap) acc.assoc(key, val);
         count = count + 1;
         if (acc.count() != count) {
@@ -1076,6 +1001,17 @@ public class EdnParser {
   }
 
   public Object readObject(boolean throwOnEOF) {
+    Object o = readObjectSafe(throwOnEOF);
+
+    if (!(o instanceof UnexpectedCharacter)) {
+      return o;
+    }
+
+    int ch = ((UnexpectedCharacter) o).ch;
+    throw new RuntimeException("Unexpected character: " + ((char) ch) + context());
+  }
+
+  public Object readObjectSafe(boolean throwOnEOF) {
     if (reader == null) {
       return null;
     }
@@ -1201,7 +1137,7 @@ public class EdnParser {
             return readSymbol();
           }
 
-          throw new RuntimeException("Unexpected character: " + ((char) ch1) + context());
+          return new UnexpectedCharacter(ch1);
         }
       }
     }
@@ -1373,5 +1309,13 @@ public class EdnParser {
     }
 
     return newTimestamp.invoke(year, months, days, hours, minutes, seconds, nano, zoneSign, zoneHours, zoneMinutes);
+  }
+
+  public static class UnexpectedCharacter {
+    public final int ch;
+
+    public UnexpectedCharacter(int ch) {
+      this.ch = ch;
+    }
   }
 }
