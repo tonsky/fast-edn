@@ -80,7 +80,21 @@
     "#{"         Exception #"EOF while reading set"
     "#{1 2"      Exception #"EOF while reading set"
     "#{1 2 1}"   Exception #"Duplicate key: 1"
-    "#"          Exception #"EOF while reading dispatch macro"))
+    "#"          Exception #"EOF while reading dispatch macro"
+    "#{]}"       Exception #"Unmatched delimiter: \]"
+    "#{)}"       Exception #"Unmatched delimiter: \)"
+    "[#{]]"      Exception #"Unmatched delimiter: \]"
+    "(1])"       Exception #"Unmatched delimiter: \]"
+    "[)]"        Exception #"Unmatched delimiter: \)"
+    "#{)}"       Exception #"Unmatched delimiter: \)"
+    "{)}"        Exception #"Unmatched delimiter: \)"
+    "{) )}"      Exception #"Unmatched delimiter: \)"
+    "{) 1}"      Exception #"Unmatched delimiter: \)"
+    "{) 1 ) 2}"  Exception #"Unmatched delimiter: \)"
+    "{1 )}"      Exception #"Unmatched delimiter: \)"
+    "{2 ) 1 )}"  Exception #"Unmatched delimiter: \)"
+    "{1 ) ) 2 ] 3 ] 4}" Exception #"Unmatched delimiter: \)"
+    "[[] #{{[] :A0*6} #{]}}]" Exception #"Unmatched delimiter: \]"))
 
 
 (deftest tokens-test
@@ -619,3 +633,14 @@
          (edn/read-string "#{:a 1 ;comment\n}")))
   (is (= {:a 1}
          (edn/read-string "{:a 1 ;comment\n}"))))
+
+(deftest plus-or-minus-before-closing-delimiter-test
+  (is (= '(-) (edn/read-string "(-)")))
+  (is (= '(-2) (edn/read-string "(-2)")))
+  (is (= '(+) (edn/read-string "(+)")))
+  (is (= '[-] (edn/read-string "[-]")))
+  (is (= '[+] (edn/read-string "[+]")))
+  (is (= '{0 -} (edn/read-string "{0 -}")))
+  (is (= '{0 +} (edn/read-string "{0 +}")))
+  (is (= '{- -} (edn/read-string "{- -}")))
+  (is (= '#{{0 +}} (edn/read-string "#{{0 +}}"))))
