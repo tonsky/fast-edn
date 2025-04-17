@@ -831,12 +831,16 @@ public class EdnParser {
 
     while (!isEOF) {
       Object o = readObjectSafe(throwOnEOF);
-      if (o instanceof UnexpectedCharacter && ((UnexpectedCharacter) o).ch == ')') {
-        IPersistentList res = PersistentList.EMPTY;
-        for (ListIterator i = acc.listIterator(acc.size()); i.hasPrevious(); ) {
-          res = (IPersistentList) res.cons(i.previous());
+      if (o instanceof UnexpectedCharacter) {
+        if (((UnexpectedCharacter) o).ch == ')') {
+          IPersistentList res = PersistentList.EMPTY;
+          for (ListIterator i = acc.listIterator(acc.size()); i.hasPrevious(); ) {
+            res = (IPersistentList) res.cons(i.previous());
+          }
+          return res;
+        } else {
+          throw new RuntimeException("Unmatched delimiter: "  + ((char) ((UnexpectedCharacter) o).ch));
         }
-        return res;
       } else {
         acc.add(o);
       }
@@ -856,8 +860,12 @@ public class EdnParser {
     while (!isEOF) {
       Object o = readObjectSafe(throwOnEOF);
 
-      if (o instanceof UnexpectedCharacter && ((UnexpectedCharacter) o).ch == ']') {
-        return (PersistentVector) acc.persistent();
+      if (o instanceof UnexpectedCharacter) {
+        if (((UnexpectedCharacter) o).ch == ']') {
+          return (PersistentVector) acc.persistent();
+        } else {
+          throw new RuntimeException("Unmatched delimiter: " + ((char) ((UnexpectedCharacter) o).ch));
+        }
       } else {
         acc = acc.conj(o);
       }
@@ -878,8 +886,12 @@ public class EdnParser {
     while (!isEOF) {
       Object o = readObjectSafe(throwOnEOF);
 
-      if (o instanceof UnexpectedCharacter && ((UnexpectedCharacter) o).ch == '}') {
-        return (PersistentHashSet) acc.persistent();
+      if (o instanceof UnexpectedCharacter) {
+        if (((UnexpectedCharacter) o).ch == '}') {
+          return (PersistentHashSet) acc.persistent();
+        } else {
+          throw new RuntimeException("Unmatched delimiter: " + ((char) ((UnexpectedCharacter) o).ch));
+        }
       } else {
         acc = (ATransientSet) acc.conj(o);
         if (count + 1 != acc.count()) {
@@ -904,9 +916,12 @@ public class EdnParser {
 
     while (!isEOF) {
       Object key = readObjectSafe(throwOnEOF);
-
-      if (key instanceof UnexpectedCharacter && ((UnexpectedCharacter) key).ch == '}') {
-        return acc.persistent();
+      if (key instanceof UnexpectedCharacter) {
+        if (((UnexpectedCharacter) key).ch == '}') {
+          return acc.persistent();
+        } else {
+          throw new RuntimeException("Unmatched delimiter: " + ((char) ((UnexpectedCharacter) key).ch));
+        }
       } else {
         if (ns != null) {
           if (key instanceof Keyword) {
@@ -927,8 +942,12 @@ public class EdnParser {
         }
 
         Object val = readObjectSafe(throwOnEOF);
-        if (val instanceof UnexpectedCharacter && ((UnexpectedCharacter) val).ch == '}') {
-          throw new RuntimeException("Map literal must contain an even number of forms: " + toUnfinishedCollString(acc.persistent()) + ", " + key + context());
+        if (val instanceof UnexpectedCharacter) {
+          if (((UnexpectedCharacter) val).ch == '}') {
+            throw new RuntimeException("Map literal must contain an even number of forms: " + toUnfinishedCollString(acc.persistent()) + ", " + key + context());
+          } else {
+            throw new RuntimeException("Unmatched delimiter: " + ((char) ((UnexpectedCharacter) val).ch));
+          }
         }
 
         acc = (ATransientMap) acc.assoc(key, val);
@@ -1047,14 +1066,13 @@ public class EdnParser {
 
         case '-': {
           int ch2 = read();
+          unread();
 
           if (-1 == ch2 || isBoundary(ch2)) {
             return Symbol.intern(null, "-");
           } else if ('0' <= ch2 && ch2 <= '9') {
-            unread();
             return readNumberNegative();
           } else {
-            unread();
             return continueReadingSymbol('-');
           }
         }
@@ -1069,14 +1087,13 @@ public class EdnParser {
 
         case '+': {
           int ch2 = read();
+          unread();
 
           if (-1 == ch2 || isBoundary(ch2)) {
             return Symbol.intern(null, "+");
           } else if ('0' <= ch2 && ch2 <= '9') {
-            unread();
             return readNumber();
           } else {
-            unread();
             return continueReadingSymbol('+');
           }
         }
