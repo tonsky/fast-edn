@@ -106,7 +106,7 @@ Optionally, you can include line number/column information at the cost of a litt
 Add this to `deps.edn`:
 
 ```clojure
-io.github.tonsky/fast-edn {:mvn/version "1.1.0"}
+io.github.tonsky/fast-edn {:mvn/version "1.1.3"}
 ```
 
 `read-string` works exactly the same as in `clojure.edn`:

@@ -1,3 +1,7 @@
+### 1.1.3 - May 4, 2025
+
+- Fix parsing `-` and `+` before delim and `UnexpectedCharacter` leaks #6 via @frenchy64 @ericnormand @balloneij @dpetranek @sivakusayan @brunchboy @djwhitt
+
 ### 1.1.2 - Jan 5, 2025
 
 - Fixed reading `)` `]` `}` after line comment #3
