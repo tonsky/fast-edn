@@ -451,7 +451,13 @@
     "##inf"
     "##INF"
     "##In"
-    "##+NaN"))
+    "##+NaN"
+
+    ;; issue #10 -- symbolic value must be followed by a boundary
+    "##Inf-1"
+    "#{##Inf-1}"
+    "##NaN1"
+    "##Infx"))
 
 
 (deftest lists-test

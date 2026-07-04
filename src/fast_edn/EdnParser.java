@@ -900,16 +900,39 @@ public class EdnParser {
   }
 
   public Double readSymbolicValue() {
-    int ch = read();
+    int    ch = read();
+    Double val;
+    String name;
+
     if (compareNext(ch, "Inf")) {
-      return Double.POSITIVE_INFINITY;
+      val = Double.POSITIVE_INFINITY;
+      name = "Inf";
     } else if (compareNext(ch, "-Inf")) {
-      return Double.NEGATIVE_INFINITY;
+      val = Double.NEGATIVE_INFINITY;
+      name = "-Inf";
     } else if (compareNext(ch, "NaN")) {
-      return Double.NaN;
+      val = Double.NaN;
+      name = "NaN";
     } else {
       throw new RuntimeException("Unknown symbolic value" + context());
     }
+
+    int peek = read();
+    if (peek == -1) {
+      return val;
+    }
+    unread();
+    if (isBoundary(peek)) {
+      return val;
+    }
+
+    StringBuilder rest = new StringBuilder(name);
+    int ch2 = read();
+    while (ch2 != -1 && !isBoundary(ch2)) {
+      rest.append((char) ch2);
+      ch2 = read();
+    }
+    throw new RuntimeException("Unknown symbolic value: ##" + rest + context());
   }
 
 
