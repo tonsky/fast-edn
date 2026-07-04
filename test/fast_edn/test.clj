@@ -202,6 +202,9 @@
     " ns/sym "      'ns/sym
     "[a/b c/d]"     '[a/b c/d]
     "абв"           'абв
+    "sym#"          'sym#
+    "sym#sym"       'sym#sym
+    "sym#_sym"      'sym#_sym
     
     ;; not in spec
     ".1"            '.1
@@ -212,25 +215,53 @@
     "ns//"          'ns//
     "ns/sym/sym"    'ns/sym/sym
     "ns//sym"       'ns//sym
-    
+
+    ;; issue-16 -- allow ', `, ~, @, ~@ in the middle of a symbol
+    "a'b"           (symbol "a'b")
+    "a'"            (symbol "a'")
+
+    ;; issue-9 -- allow colons in symbols
+    "a:b"           (symbol "a:b")
+
+    ;; issue-19 -- Trailing line comment included in symbol or keyword
+    "sym;"          'sym
+    "sym;comment"   'sym
+
+    ;; issue-20 -- Trailing ^ included in symbols and keywords
+    "sym^"          'sym
+    "sym^meta"      'sym
+
     ;; extras -- don't work in clojure.edn
     "ns/1a"         (symbol "ns" "1a")
     "ns/sym/"       (symbol "ns" "sym/")
 
-    ;; issue-19 -- Trailing line comment included in symbol or keyword
-    "$;"            '$
-    "$;asdf"        '$
+    ;; issue-9 -- allow colons in symbols
+    "A0:"           (symbol "A0:")
+    "A0::a"         (symbol "A0::a")
+    "A:::"          (symbol "A:::")
 
-    ;; issue-20 -- Trailing ^ included in symbols and keywords
-    "!^"            '!)
-  
+    ;; issue-16 -- allow ', `, ~, @, ~@ in the middle of a symbol
+    "a`b"           (symbol "a`b")
+    "a~b"           (symbol "a~b")
+    "a@b"           (symbol "a@b"))
+
   (are [s] (thrown? Exception (edn/read-string s))
     "ns/"
     "/sym"
     "//"
-    "1a"    
+    "1a"
     "-1a"
-    "+1a"))
+    "+1a"
+
+    ;; issue-16 -- don't allow ', `, ~, @, ~@ at the beginning of a symbol
+    "`"
+    "`sym"
+    "~"
+    "~sym"
+    "@"
+    "@sym"
+    "'"
+    "'sym"))
     
 
 (deftest keywords-test
@@ -247,6 +278,9 @@
     ":ns/sym"        :ns/sym
     " :ns/sym "      :ns/sym
     ":абв"           :абв
+    ":kw#"           :kw#
+    ":kw#kw"         :kw#kw
+    ":kw#_kw"        :kw#_kw
     
     ;; not in spec
     ":.1a"           :.1a
@@ -261,15 +295,33 @@
     ":1a"            :1a
     ":-1a"           :-1a
     ":+1a"           :+1a
-    
+
+    ;; issue-9 -- allow colons in the middle of keywords
+    ":a:b"           :a:b
+
     ;; extras -- don't work in clojure.edn
     ":ns/sym/"       (keyword "ns" "sym/")
     ":ns/1a"         (keyword "ns" "1a")
 
-    ;; issues #19, #20 -- comment and meta terminate keyword
-    ":$;asdf"        :$
-    ":$^:a[]"        :$)
-  
+    ;; issue-9 -- allow colons in the middle of keywords
+    ":A0:"           (keyword "A0:")
+    ":A0::a"         (keyword "A0::a")
+
+    ;; issue-16 -- allow ', `, ~, @, ~@ at the beginning of a keyword
+    ":'a"            (keyword "'a")
+    ":a'b"           (keyword "a'b")
+    ":`"             (keyword "`")
+    ":~"             (keyword "~")
+    ":@"             (keyword "@")
+    ":a`b"           (keyword "a`b")
+    ":a~b"           (keyword "a~b")
+    ":a@b"           (keyword "a@b")
+
+    ;; issue-19 -- Trailing line comment included in symbol or keyword
+    ;; issue-20 -- Trailing ^ included in symbols and keywords
+    ":kw;asdf"        :kw
+    ":kw^:a[]"        :kw)
+
   (are [s] (thrown? Exception (edn/read-string s))
     ":"
     ": "
@@ -277,9 +329,19 @@
     ":ns/"
     ":/sym"
     "://"
-    
+
+    ;; issue-9 -- don't allow more than one colon at the beginning of a keyword
+    "::kw"
+    ":::kw"
+
     ;; extras -- don't work in clojure.edn
-    ":///"))
+    ":///"
+
+    ;; issue-17 -- Cannot parse ://a
+    "://a"
+
+    ;; issue-24 -- Cannot parse :/!/!
+    ":/!/!"))
 
 
 (deftest integers-test

@@ -504,6 +504,12 @@ public class EdnParser {
       throw new RuntimeException("Symbol can't be empty" + context());
     }
 
+    // issue-16 -- ' ` ~ @ are not allowed at the beginning of a symbol
+    char first = buf[start];
+    if (first == '\'' || first == '@' || first == '`' || first == '~') {
+      throw new RuntimeException("Invalid leading character: " + first + context());
+    }
+
     if (1 == end - start && buf[start] == '/') {
       return Symbol.intern(null, "/");
     }
@@ -618,6 +624,11 @@ public class EdnParser {
   public Keyword finalizeKeyword(char[] buf, int start, int slash, int end) {
     if (end == start) {
       throw new RuntimeException("Keyword can't be empty" + context());
+    }
+
+    // issue-9 -- keyword can start with colon
+    if (buf[start] == ':') {
+      throw new RuntimeException("Keyword can't start with: ::" + context());
     }
 
     if (1 == end - start && buf[start] == '/') {
