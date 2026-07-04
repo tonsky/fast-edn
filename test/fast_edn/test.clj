@@ -65,7 +65,13 @@
 
     "#{}" #{}
     "#{1 2 3}" '#{1 2 3}
-    "#{,\n1,2\n, \n3\n   }" '#{1 2 3})
+    "#{,\n1,2\n, \n3\n   }" '#{1 2 3}
+
+    ;; issue-12 -- Unprintable ASCII codes recognized as forms
+    "\u001C" nil
+    "\u000B" nil
+    "[\u000B\u000C\u001C\u001D\u001E\u001F]" []
+    "[1\u000B2]" [1 2])
 
   (are [s c m] (thrown-with-msg? c m (edn/read-string s))
     "{"          Exception #"EOF while reading map"
@@ -165,7 +171,12 @@
     "\\o0"        \o0
     "\\o12"       \o12
     "\\o176"      \o176
-    "\\o377"      \o377)
+    "\\o377"      \o377
+
+    ;; issue-23 -- Cannot parse character followed by ^ or ;
+    "\\ ;"        \space
+    "\\ ^:a[]"    \space
+    "\\a;b"       \a)
   
   (are [s] (thrown? Exception (edn/read-string s))
     "\\u20"
@@ -204,7 +215,14 @@
     
     ;; extras -- don't work in clojure.edn
     "ns/1a"         (symbol "ns" "1a")
-    "ns/sym/"       (symbol "ns" "sym/"))
+    "ns/sym/"       (symbol "ns" "sym/")
+
+    ;; issue-19 -- Trailing line comment included in symbol or keyword
+    "$;"            '$
+    "$;asdf"        '$
+
+    ;; issue-20 -- Trailing ^ included in symbols and keywords
+    "!^"            '!)
   
   (are [s] (thrown? Exception (edn/read-string s))
     "ns/"
@@ -246,7 +264,11 @@
     
     ;; extras -- don't work in clojure.edn
     ":ns/sym/"       (keyword "ns" "sym/")
-    ":ns/1a"         (keyword "ns" "1a"))
+    ":ns/1a"         (keyword "ns" "1a")
+
+    ;; issues #19, #20 -- comment and meta terminate keyword
+    ":$;asdf"        :$
+    ":$^:a[]"        :$)
   
   (are [s] (thrown? Exception (edn/read-string s))
     ":"
@@ -318,30 +340,30 @@
     ;; extras -- don't work in clojure.edn
     "2r1111N"   (clojure.lang.BigInt/fromLong 2r1111)
 
-    ;; issue-7 Cannot read number ending with #
+    ;; issue-7 -- Cannot read number ending with #
     "1#"        1
     "[0#_a]"    [0]
     "{1/2#{}}"  {1/2 #{}}
     "[1:kw]"    [1 :kw]
 
-    ;; issue-11 Nested octal numbers are parsed as decimal
-    ;; issue-22 Octal numbers ending in delimiter parsed as decimal
+    ;; issue-11 -- Nested octal numbers are parsed as decimal
+    ;; issue-22 -- Octal numbers ending in delimiter parsed as decimal
     "[075]"     [61]
     "[-075]"    [-61]
     "[0 010 1]" [0 8 1]
     "010\""     8
     "010]"      8
 
-    ;; issues-14 Nested large number is parsed incorrectly
-    ;; issue-21 Large number followed by , parsed incorrectly
+    ;; issue-14 -- Nested large number is parsed incorrectly
+    ;; issue-21 -- Large number followed by , parsed incorrectly
     "1000000000000000000000000," 1000000000000000000000000N
     "#{100000000000000000000}"   #{100000000000000000000N}
     "[-100000000000000000000]"   [-100000000000000000000N]
 
-    ;; issue-25 Cannot parse leading zero after radix
+    ;; issue-25 -- Cannot parse leading zero after radix
     "10R08"     8
 
-    ;; issue-26 Cannot parse 25RN
+    ;; issue-26 -- Cannot parse 25RN
     "25RN"      23)
 
   (are [s] (thrown? Exception (edn/read-string s))
@@ -350,7 +372,7 @@
     "0xG"
     "1n"
 
-    ;; issue-13 0-1 and 0+1 are recognized as numbers
+    ;; issue-13 -- 0-1 and 0+1 are recognized as numbers
     "0-1"
     "0+1"
     ))
@@ -392,7 +414,7 @@
     "##Inf"   ##Inf
     "##-Inf"  ##-Inf
 
-    ;; issue-7 Cannot read number ending with #
+    ;; issue-7 -- Cannot read number ending with #
     "[0##Inf]" [0 ##Inf])
   
   ;; not in spec
