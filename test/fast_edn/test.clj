@@ -185,7 +185,18 @@
     "\\wh"
     "\\uD800"
     "\\uDFFF"
-    "\\0378"))
+    "\\0378"
+
+    ;; issue #8 -- octal and named characters must be followed by a boundary
+    "\\oo"
+    "\\ormfeed"
+    "\\o-1/2"
+    "#{\\o-1/2}"
+    "\\o12x"
+    "\\space-1"
+    "#{\\space-1}"
+    "\\newline5"
+    "\\ua66ex"))
 
 (deftest symbols-test
   (are [s e] (= e (edn/read-string s))

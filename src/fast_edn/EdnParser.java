@@ -313,7 +313,12 @@ public class EdnParser {
       if (ch >= '0' && ch <= '7') {
         value = (value << 3) + (ch - '0');
       } else {
-        unread();
+        if (ch != -1) {
+          unread();
+          if (i == 0) {
+            throw new RuntimeException("Invalid digit: " + ((char) ch) + context());
+          }
+        }
         break;
       }
     }
@@ -321,7 +326,7 @@ public class EdnParser {
     if (value > 0377) {
       throw new RuntimeException("Octal escape sequence must be in range [0, 377], got: " + Integer.toString(value, 8) + context());
     }
-    
+
     return (char) value;
   }
 
@@ -410,23 +415,35 @@ public class EdnParser {
       if (ch >= 0xD800 && ch <= 0xDFFF) {
         throw new RuntimeException("Invalid character constant: \\u" + new Formatter().format("%04d", ch) + context());
       }
-      return Character.valueOf((char) ch);
+      return finalizeCharacter((char) ch);
     } else if (ch == 'o') {
-      return Character.valueOf(readOctalChar());
+      return finalizeCharacter(readOctalChar());
     } else if (compareNext(ch, "newline")) {
-      return '\n';
+      return finalizeCharacter('\n');
     } else if (compareNext(ch, "return")) {
-      return '\r';
+      return finalizeCharacter('\r');
     } else if (compareNext(ch, "space")) {
-      return ' ';
+      return finalizeCharacter(' ');
     } else if (compareNext(ch, "tab")) {
-      return '\t';
+      return finalizeCharacter('\t');
     } else if (compareNext(ch, "backspace")) {
-      return '\b';
+      return finalizeCharacter('\b');
     } else if (compareNext(ch, "formfeed")) {
-      return '\f';
+      return finalizeCharacter('\f');
     }
 
+    throw new RuntimeException("Error parsing character" + context());
+  }
+
+  public Character finalizeCharacter(char value) {
+    int peek = read();
+    if (peek == -1) {
+      return value;
+    }
+    unread();
+    if (isBoundary(peek)) {
+      return value;
+    }
     throw new RuntimeException("Error parsing character" + context());
   }
 
