@@ -1217,23 +1217,25 @@ public class EdnParser {
   public static final BitSet boundaryMask = new BitSet(0x80);
   
   static {
+    // ASCII whitespace as in Character.isWhitespace
     whitespaceMask.set('\t');
     whitespaceMask.set('\n');
+    whitespaceMask.set(0x0B); // VERTICAL TAB
+    whitespaceMask.set('\f');
     whitespaceMask.set('\r');
+    whitespaceMask.set(0x1C, 0x20); // FILE/GROUP/RECORD/UNIT SEPARATOR
     whitespaceMask.set(' ');
     whitespaceMask.set(',');
 
-    boundaryMask.set('\t');
-    boundaryMask.set('\n');
-    boundaryMask.set('\r');
-    boundaryMask.set(' ');
-    boundaryMask.set(',');
+    boundaryMask.or(whitespaceMask);
     boundaryMask.set('"');
     boundaryMask.set('(');
     boundaryMask.set(')');
+    boundaryMask.set(';');
     boundaryMask.set('[');
     boundaryMask.set('\\');
     boundaryMask.set(']');
+    boundaryMask.set('^');
     boundaryMask.set('{');
     boundaryMask.set('}');
   }

@@ -65,7 +65,13 @@
 
     "#{}" #{}
     "#{1 2 3}" '#{1 2 3}
-    "#{,\n1,2\n, \n3\n   }" '#{1 2 3})
+    "#{,\n1,2\n, \n3\n   }" '#{1 2 3}
+
+    ;; issue #12 -- control characters are whitespace, as in Character/isWhitespace
+    "\u001C" nil
+    "\u000B" nil
+    "[\u000B\u000C\u001C\u001D\u001E\u001F]" []
+    "[1\u000B2]" [1 2])
 
   (are [s c m] (thrown-with-msg? c m (edn/read-string s))
     "{"          Exception #"EOF while reading map"
@@ -165,7 +171,12 @@
     "\\o0"        \o0
     "\\o12"       \o12
     "\\o176"      \o176
-    "\\o377"      \o377)
+    "\\o377"      \o377
+
+    ;; issue #23 -- comment and meta terminate character
+    "\\ ;"        \space
+    "\\ ^:a[]"    \space
+    "\\a;b"       \a)
   
   (are [s] (thrown? Exception (edn/read-string s))
     "\\u20"
@@ -204,7 +215,14 @@
     
     ;; extras -- don't work in clojure.edn
     "ns/1a"         (symbol "ns" "1a")
-    "ns/sym/"       (symbol "ns" "sym/"))
+    "ns/sym/"       (symbol "ns" "sym/")
+
+    ;; issue #19 -- comment terminates symbol
+    "$;"            '$
+    "$;asdf"        '$
+
+    ;; issue #20 -- meta terminates symbol
+    "!^"            '!)
   
   (are [s] (thrown? Exception (edn/read-string s))
     "ns/"
@@ -246,7 +264,11 @@
     
     ;; extras -- don't work in clojure.edn
     ":ns/sym/"       (keyword "ns" "sym/")
-    ":ns/1a"         (keyword "ns" "1a"))
+    ":ns/1a"         (keyword "ns" "1a")
+
+    ;; issues #19, #20 -- comment and meta terminate keyword
+    ":$;asdf"        :$
+    ":$^:a[]"        :$)
   
   (are [s] (thrown? Exception (edn/read-string s))
     ":"
