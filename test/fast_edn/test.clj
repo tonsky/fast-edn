@@ -743,11 +743,34 @@
     "[1 #_ 2 3]"        [1 3]
     "[1 #_\n2 3]"       [1 3]
     "[#_#_1 #_2 3 4 5]" [4 5])
-  
+
   (are [s] (thrown? Exception (edn/read-string s))
     "#_"
     "#_#_"
-    "#_#_1"))
+    "#_#_1")
+
+  ;; issue #28 -- tag handlers should not be invoked inside discard
+  (testing "tagged literals inside discard"
+    (let [calls (atom 0)
+          opts  {:readers {'foo (fn [val] (swap! calls inc) val)}
+                 :eof     nil}]
+      (is (= nil (edn/read-string opts "#_ #foo [1 2 3]")))
+      (is (= 42 (edn/read-string opts "#_ #foo [1 2 3] 42")))
+      (is (= [1 4] (edn/read-string opts "[1 #_ #foo [2 3] 4]")))
+      (is (= 42 (edn/read-string opts "#_ #foo #foo [1 2 3] 42")))
+      (is (= 0 @calls))
+      (is (= [1 2 3] (edn/read-string opts "#_ 1 #foo [1 2 3]")))
+      (is (= 1 @calls)))
+
+    (let [calls (atom 0)
+          opts  {:default (fn [tag val] (swap! calls inc) val)
+                 :eof     nil}]
+      (is (= 42 (edn/read-string opts "#_ #foo [1 2 3] 42")))
+      (is (= 0 @calls)))
+
+    ;; unknown tags are skipped inside discard
+    (is (= 42 (edn/read-string {:eof nil} "#_ #unknown [1 2 3] 42")))
+    (is (= 42 (edn/read-string {:eof nil} "#_ #inst \"garbage\" 42")))))
 
 
 (deftest eof-test

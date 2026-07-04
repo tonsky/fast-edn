@@ -30,6 +30,7 @@ public class EdnParser {
   public int      line;
   public int      column;
   public boolean  skipLF;
+  public int      discardDepth;
 
   public EdnParser(boolean countLines, int bufferSize, ILookup dataReaders, IFn defaultDataReader, boolean throwOnEOF, Object eofValue, Reader reader) {
     this.countLines = countLines;
@@ -55,6 +56,7 @@ public class EdnParser {
     this.line = 0;
     this.column = 0;
     this.skipLF = false;
+    this.discardDepth = 0;
     return this;
   }
 
@@ -594,6 +596,12 @@ public class EdnParser {
 
     if (tag instanceof Symbol) {
       Object value = readObject(true);
+
+      // don’t invoke tag handlers inside #_ (issue #28)
+      if (discardDepth > 0) {
+        return value;
+      }
+
       IFn dataReader = (IFn) RT.get(dataReaders, tag);
 
       if (dataReader != null) {
@@ -1216,7 +1224,12 @@ public class EdnParser {
           }
 
           if (ch2 == '_') {
-            readObject(true);
+            discardDepth += 1;
+            try {
+              readObject(true);
+            } finally {
+              discardDepth -= 1;
+            }
             continue;
           }
 
