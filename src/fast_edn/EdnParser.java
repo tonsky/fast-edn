@@ -453,19 +453,26 @@ public class EdnParser {
   ////////////////
   
   public Object readSymbol() {
-    char[] buf   = readBuf;
-    int    start = readPos;
-    int    pos   = start;
-    int    len   = readLen;
-    int    slash = -1;
+    char[]  buf   = readBuf;
+    int     start = readPos;
+    int     pos   = start;
+    int     len   = readLen;
+    int     slash = -1;
+    boolean validate = false;
 
     for (; pos < len; ++pos) {
       char ch = buf[pos];
-      if (isBoundary(ch)) {
-        readPos = pos;
-        return finalizeSymbol(buf, start, slash, pos);
-      } else if (ch == '/' && slash == -1) {
-        slash = pos;
+      if (ch < 0x80 && tokenInterestMask.get(ch)) {
+        if (isBoundary(ch)) {
+          readPos = pos;
+          return finalizeSymbol(buf, start, slash, pos, validate);
+        } else if (ch == '/') {
+          if (slash == -1) {
+            slash = pos;
+          }
+        } else {
+          validate = true;
+        }
       }
     }
 
@@ -503,7 +510,7 @@ public class EdnParser {
       nextBuffer();
     }
 
-    return finalizeSymbol(accumulator, 0, slash, accumulatorLength);
+    return finalizeSymbol(accumulator, 0, slash, accumulatorLength, true);
   }
 
   public Object continueReadingSymbol(char ch) {
@@ -537,12 +544,14 @@ public class EdnParser {
     }
   }
 
-  public Object finalizeSymbol(char[] buf, int start, int slash, int end) {
+  public Object finalizeSymbol(char[] buf, int start, int slash, int end, boolean validate) {
     if (end == start) {
       throw new RuntimeException("Symbol can't be empty" + context());
     }
 
-    validateToken(buf, start, end, "");
+    if (validate) {
+      validateToken(buf, start, end, "");
+    }
 
     if (1 == end - start && buf[start] == '/') {
       return Symbol.intern(null, "/");
@@ -604,18 +613,25 @@ public class EdnParser {
   /////////////////
 
   public Keyword readKeyword() {
-    char[] buf   = readBuf;
-    int    start = readPos;
-    int    pos   = start;
-    int    len   = readLen;
-    int    slash = -1;
+    char[]  buf   = readBuf;
+    int     start = readPos;
+    int     pos   = start;
+    int     len   = readLen;
+    int     slash = -1;
+    boolean validate = false;
     for (; pos < len; ++pos) {
       char ch = buf[pos];
-      if (isBoundary(ch)) {
-        readPos = pos;
-        return finalizeKeyword(buf, start, slash, pos);
-      } else if (ch == '/' && slash == -1) {
-        slash = pos;
+      if (ch < 0x80 && tokenInterestMask.get(ch)) {
+        if (isBoundary(ch)) {
+          readPos = pos;
+          return finalizeKeyword(buf, start, slash, pos, validate);
+        } else if (ch == '/') {
+          if (slash == -1) {
+            slash = pos;
+          }
+        } else {
+          validate = true;
+        }
       }
     }
     readPos = pos;
@@ -652,19 +668,21 @@ public class EdnParser {
       nextBuffer();
     }
 
-    return finalizeKeyword(accumulator, 0, slash, accumulatorLength);
+    return finalizeKeyword(accumulator, 0, slash, accumulatorLength, true);
   }
 
-  public Keyword finalizeKeyword(char[] buf, int start, int slash, int end) {
+  public Keyword finalizeKeyword(char[] buf, int start, int slash, int end, boolean validate) {
     if (end == start) {
       throw new RuntimeException("Keyword can't be empty" + context());
     }
 
-    if (buf[start] == ':') {
-      throw new RuntimeException("Invalid token: :" + new String(buf, start, end - start) + context());
-    }
+    if (validate) {
+      if (buf[start] == ':') {
+        throw new RuntimeException("Invalid token: :" + new String(buf, start, end - start) + context());
+      }
 
-    validateToken(buf, start, end, ":");
+      validateToken(buf, start, end, ":");
+    }
 
     if (1 == end - start && buf[start] == '/') {
       return Keyword.intern(Symbol.intern(null, "/"));
@@ -1308,7 +1326,8 @@ public class EdnParser {
 
   public static final BitSet whitespaceMask = new BitSet(0x30);
   public static final BitSet boundaryMask = new BitSet(0x80);
-  
+  public static final BitSet tokenInterestMask = new BitSet(0x80);
+
   static {
     // ASCII whitespace as in Character.isWhitespace
     whitespaceMask.set('\t');
@@ -1331,6 +1350,15 @@ public class EdnParser {
     boundaryMask.set('^');
     boundaryMask.set('{');
     boundaryMask.set('}');
+
+    // token chars that readSymbol/readKeyword can't just skip over:
+    // boundaries, namespace separator and chars that need validateToken
+    tokenInterestMask.or(boundaryMask);
+    tokenInterestMask.set('/');
+    tokenInterestMask.set(':');
+    tokenInterestMask.set('@');
+    tokenInterestMask.set('`');
+    tokenInterestMask.set('~');
   }
 
   public static boolean isWhitespace(int ch) {
