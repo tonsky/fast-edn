@@ -8,13 +8,68 @@
    [clojure.string :as str]
    [clojure.tools.reader.edn :as tools]
    [cognitect.transit :as transit]
-   [duti.core :as duti]
+   [criterium.core :as criterium]
    [fast-edn.generators :as cgen]
    [fast-edn.core :as fast-edn]
    [jsonista.core :as jsonista])
   (:import
+   [com.sun.management ThreadMXBean]
    [java.io ByteArrayInputStream File FileFilter]
+   [java.lang.management ManagementFactory]
    [java.nio.file Files]))
+
+(def ^:dynamic *bench-stack*
+  [])
+
+(defmacro benching
+  "Like `testing`, but for bench"
+  [name & body]
+  `(binding [*bench-stack* (conj *bench-stack* ~name)]
+     ~@body))
+
+(defn format-value [{:keys [unit format]
+                     :or {format "%.3f"}}
+                    value]
+  (case unit
+    "ns"   (clojure.core/format (str format " ns") (* value 1e9))
+    "μs"   (clojure.core/format (str format " μs") (* value 1e6))
+    "ms"   (clojure.core/format (str format " ms") (* value 1e3))
+    "s"    (clojure.core/format (str format " s")  value)
+    #_else (let [[factor unit] (criterium/scale-time value)]
+             (criterium/format-value value factor unit))))
+
+(defn bench-impl [opts name body-fn]
+  (println (str "Benchmarking " (str/join " → " (conj *bench-stack* name))))
+  (let [bean   ^ThreadMXBean (ManagementFactory/getThreadMXBean)
+        bytes  (.getCurrentThreadAllocatedBytes bean)
+        res    (criterium/benchmark* body-fn opts)
+        mean   (format-value opts (first (:mean res)))
+        stddev (format-value opts (Math/sqrt (first (:variance res))))
+        calls  (:execution-count res)
+        bytes  (- (.getCurrentThreadAllocatedBytes bean) bytes)
+        alloc  (/ bytes (+ calls (:warmup-executions res)))]
+    (println (str "└╴Mean time: " mean ", alloc: " (format "%.2f" (/ alloc 1024.0)) " KB, stddev: " stddev ", calls: " calls))
+    mean))
+
+(defn- bench-name [body]
+  (let [name (str/join " " body)]
+    (if (< (count name) 100) name (str (subs name 0 100) "..."))))
+
+(defmacro quick-bench
+  "Runs body in a loop and prints median execution time"
+  [& body]
+  (let [[opts body] (if (map? (first body))
+                      [(first body) (next body)]
+                      [nil body])]
+    `(bench-impl (merge criterium/*default-quick-bench-opts* ~opts) ~(bench-name body) (fn [] ~@body))))
+
+(defmacro long-bench
+  "Runs body in a loop and prints median execution time"
+  [& body]
+  (let [[opts body] (if (map? (first body))
+                      [(first body) (next body)]
+                      [nil body])]
+    `(bench-impl (merge criterium/*default-benchmark-opts* ~opts) ~(bench-name body) (fn [] ~@body))))
 
 (defn print-table [ks rows]
   (when (seq rows)
@@ -91,7 +146,7 @@
     (print-table (cons :file parser-names)
       (->>
         (for [^File file files 
-              :let [rows (duti/benching (File/.getName file)
+              :let [rows (benching (File/.getName file)
                            (doall
                              (for [parser-name parser-names
                                    :when (has-file? parser-name [file])
@@ -99,10 +154,10 @@
                                          content  (case parser-name
                                                     "transit+msgpack" (Files/readAllBytes (.toPath file))
                                                     #_else            (slurp file))
-                                         time     (duti/benching parser-name
+                                         time     (benching parser-name
                                                     (case profile
-                                                      :quick (duti/bench {:unit "μs"} (parse-fn content))
-                                                      :long  (duti/long-bench {:unit "μs"} (parse-fn content))))]]
+                                                      :quick (quick-bench {:unit "μs"} (parse-fn content))
+                                                      :long  (long-bench {:unit "μs"} (parse-fn content))))]]
                                [parser-name (str/replace time " μs" "")])))]
               :when (not (empty? rows))]
           (into {:file (file-name file)} rows))
@@ -229,7 +284,7 @@
 
 (comment
   (gen-ints 1400)
-  (duti.core/bench (fast-edn.core/read-string ints-1400))
+  (quick-bench (fast-edn.core/read-string ints-1400))
   (bench {:files #"ints_\d+\.edn"}))
 
 ; ┌───────────┬─────────────┬──────────────┬───────────┐
@@ -343,27 +398,26 @@
 ; │   strings_uni_250 │ 120.249 │ 117.282 │ 108.563 │ 113.033 │ 102.445 │ 100.186 │ 108.555 │  93.131 │ 108.341 │
 ; └───────────────────┴─────────┴─────────┴─────────┴─────────┴─────────┴─────────┴─────────┴─────────┴─────────┘
 
-┌─────────────────┬──────────┐
-│           :file │ fast-edn │
-├─────────────────┼──────────┤
-│        basic_10 │    0.290 │
-│       basic_100 │    0.594 │
-│      basic_1000 │    2.815 │
-│     basic_10000 │   37.560 │
-│    basic_100000 │  370.045 │
-│       ints_1400 │   33.164 │
-│     keywords_10 │    0.625 │
-│    keywords_100 │    4.769 │
-│   keywords_1000 │   53.943 │
-│  keywords_10000 │  662.099 │
-│   nested_100000 │  503.644 │
-│    strings_1000 │   40.455 │
-│ strings_uni_250 │  108.341 │
-└─────────────────┴──────────┘
+; ┌─────────────────┬──────────┐
+; │           :file │ fast-edn │
+; ├─────────────────┼──────────┤
+; │        basic_10 │    0.290 │
+; │       basic_100 │    0.594 │
+; │      basic_1000 │    2.815 │
+; │     basic_10000 │   37.560 │
+; │    basic_100000 │  370.045 │
+; │       ints_1400 │   33.164 │
+; │     keywords_10 │    0.625 │
+; │    keywords_100 │    4.769 │
+; │   keywords_1000 │   53.943 │
+; │   nested_100000 │  503.644 │
+; │    strings_1000 │   40.455 │
+; │ strings_uni_250 │  108.341 │
+; └─────────────────┴──────────┘
 
 
 (comment
-  (duti.core/bench
+  (quick-bench
     (clojure.instant/read-instant-date "2024-12-17T15:54:00.000+01:00"))
-  (duti.core/bench
+  (quick-bench
     (fast-edn.core/read-instant-date "2024-12-17T15:54:00.000+01:00")))

@@ -3,7 +3,7 @@
   :license     {:name "MIT" :url "https://github.com/tonsky/fast-edn/blob/master/LICENSE"}
   :url         "https://github.com/tonsky/fast-edn"
   :dependencies
-  [[org.clojure/clojure "1.12.0"]]
+  [[org.clojure/clojure "1.12.5"]]
   :java-source-paths ["src"]
   :javac-options ["--release" "8" "-Xlint:-options"]
   :deploy-repositories

@@ -3,16 +3,18 @@
  :aliases
  {:dev
   {:extra-paths ["dev" "test"]
-   :extra-deps 
-   {io.github.tonsky/duti       {:git/sha "db705ace8e48c9c1e6aa2efe2a3535a45ddc3b7f"}
-    com.cnuernber/charred       {:mvn/version "1.039"}
-    metosin/jsonista            {:mvn/version "0.3.12"}
-    cheshire/cheshire           {:mvn/version "5.13.0"}
-    org.clojure/tools.reader    {:mvn/version "1.5.0"}
-    com.cognitect/transit-clj   {:mvn/version "1.1.357"}
-    virgil/virgil               {:mvn/version "0.5.1"}
-    org.clojure/test.generative {:mvn/version "1.1.1"}
-    org.clojure/data.generators {:mvn/version "1.1.1"}}
+   :extra-deps
+   {io.github.tonsky/clojure-plus {:mvn/version "1.7.2"}
+    io.github.tonsky/clj-reload   {:mvn/version "1.0.0"}
+    criterium/criterium           {:mvn/version "0.4.6"}
+    com.cnuernber/charred         {:mvn/version "1.039"}
+    metosin/jsonista              {:mvn/version "1.0.0"}
+    cheshire/cheshire             {:mvn/version "6.2.0"}
+    org.clojure/tools.reader      {:mvn/version "1.6.0"}
+    com.cognitect/transit-clj     {:mvn/version "1.1.357"}
+    virgil/virgil                 {:mvn/version "0.5.1"}
+    org.clojure/test.generative   {:mvn/version "1.1.1"}
+    org.clojure/data.generators   {:mvn/version "1.1.1"}}
    :jvm-opts ["-Dclojure.main.report=stderr"
               "-Duser.language=en"
               "-Duser.country=US"

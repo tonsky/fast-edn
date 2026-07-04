@@ -630,7 +630,6 @@
     "1/2/3"
     "08/1"
     "1/08"))
-  
 
 ;; not in spec
 (deftest meta-test

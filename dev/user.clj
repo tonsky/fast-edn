@@ -1,44 +1,66 @@
 (ns user
   (:require
-   [duti.core :as duti]
+   [clj-reload.core :as clj-reload]
+   [clojure+.hashp :as hashp]
+   [clojure+.print :as print]
+   [clojure+.error :as error]
+   [clojure+.test :as test]
    [virgil]))
 
-(duti/set-dirs "src" "dev" "test")
+(hashp/install!)
+(print/install!)
+(error/install!)
+
+
+; reload
+
+(clj-reload/init
+  {:dirs      ["src" "dev" "test"]
+   :no-reload '#{user}})
+
+(defn compile-java []
+  (virgil/compile-java ["src/fast_edn"]))
 
 (defn reload []
-  (virgil/compile-java ["src/fast_edn"])
-  (duti/reload {:only :all}))
+  (compile-java)
+  (clj-reload/reload {:only :all}))
 
-(def -main
-  duti/-main)
+
+; tests
+
+(test/install!)
 
 (defn test-all []
-  (virgil/compile-java ["src/fast_edn"])
-  (duti/test #"fast-edn\.test"))
+  (compile-java)
+  (clj-reload/reload {:only #"fast-edn\.test"})
+  (test/run #"fast-edn\.test"))
 
-(comment
-  (duti/test #"fast-edn\..*test"))
+(defn -test-main [{:keys [re]}]
+  (let [re (re-pattern (or re "fast-edn\\.(.*-)?test"))]
+    (compile-java)
+    (clj-reload/reload {:only re})
+    (let [{:keys [fail error]} (test/run re)]
+      (System/exit (+ fail error)))))
 
-(defn -test-main [_]
-  (virgil/compile-java ["src/fast_edn"])
-  (duti/test-exit #"fast-edn\.(.*-)?test"))
+
+; benchmarks
 
 (defn -bench-json [_]
-  (virgil/compile-java ["src/fast_edn"])
+  (compile-java)
   (require 'bench)
   (@(resolve 'bench/bench)
    {:files   #".*\.json"
     :parsers (keys @(resolve 'bench/json-parsers))}))
 
 (defn -bench-edn [_]
-  (virgil/compile-java ["src/fast_edn"])
+  (compile-java)
   (require 'bench)
   (@(resolve 'bench/bench)
    {:files   #".*\.edn"
     :parsers (keys @(resolve 'bench/edn-parsers))}))
 
 (defn -bench-transit [_]
-  (virgil/compile-java ["src/fast_edn"])
+  (compile-java)
   (require 'bench)
   (@(resolve 'bench/bench)
    {:files   #"transit_.*"
