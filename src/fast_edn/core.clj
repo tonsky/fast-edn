@@ -3,7 +3,7 @@
   (:require
    [clojure.java.io :as io])
   (:import
-   [java.io ByteArrayInputStream CharArrayReader File FileReader InputStream InputStreamReader Reader StringReader]
+   [java.io ByteArrayInputStream CharArrayReader File FileReader InputStream InputStreamReader PushbackReader Reader StringReader]
    [java.time ZonedDateTime ZoneOffset]
    [java.util Date]
    [fast_edn EdnParser]))
@@ -123,6 +123,59 @@
    (with-open [reader (reader source)]
      (-> ^EdnParser (parser opts reader)
        (.readNext)))))
+
+(defn read
+  "Reads the next object from stream. stream defaults to the current value
+   of *in*. Stream must be an instance of java.io.PushbackReader.
+
+   API-compatible with clojure.edn/read: consumes only the characters that
+   belong to the next form and leaves stream positioned at the form after it,
+   so subsequent (read stream) calls return consequent forms.
+
+   To achieve that, reads from stream one character at a time, which is less
+   efficient than read-once/read-next/parser. Prefer those when you control
+   the Reader.
+
+   Reads data in the EDN format: https://github.com/edn-format/edn
+
+   opts is a map that can include the following keys:
+
+     :eof         - Value to return on end-of-file. When not supplied, eof throws
+                    an exception.
+     :readers     - A map of tag symbol -> data-reader fn to be considered
+                    before default-data-readers
+     :default     - A function of two args, that will, if present and no reader is
+                    found for a tag, be called with the tag and the value"
+  ([]
+   (read *in*))
+  ([stream]
+   (read {} stream))
+  ([opts ^PushbackReader stream]
+   ;; Handing parser one char per read() call guarantees it never buffers more
+   ;; than 1 unconsumed char, which fits pushback capacity of default PushbackReader
+   (let [in     (proxy [Reader] []
+                  (read
+                    ([]
+                     (.read stream))
+                    ([cbuf off len]
+                     (let [ch (.read stream)]
+                       (if (neg? ch)
+                         -1
+                         (do
+                           (aset ^chars cbuf (int off) (char ch))
+                           1)))))
+                  (close []
+                    (.close stream)))
+         parser ^EdnParser (parser opts in)
+         obj    (.readNext parser)
+         pos    (.-readPos parser)
+         len    (.-readLen parser)]
+     ;; once isEOF is set, parser stops advancing readPos on read+unread,
+     ;; so [readPos, readLen) no longer tracks unconsumed chars. And there’s
+     ;; nothing left to push back after EOF anyway
+     (when (and (not (.-isEOF parser)) (< pos len))
+       (.unread stream (.-readBuf parser) pos (- len pos)))
+     obj)))
 
 (defn read-string
   "Reads one object from the string s. Returns nil when s is nil or empty.

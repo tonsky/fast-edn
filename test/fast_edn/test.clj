@@ -1,5 +1,6 @@
 (ns fast-edn.test
   (:require
+   [clojure.edn]
    [fast-edn.core :as edn]
    [clojure.java.io :as io]
    [clojure.string :as str]
@@ -18,6 +19,40 @@
     (is (= {:b 2} (edn/read-next parser)))
     (is (= ::eof (edn/read-next parser)))))
   
+(deftest read-test
+  (let [stream (java.io.PushbackReader. (java.io.StringReader. "{:a 1}{:b 2} [3 4] foo :kw 123 4.5 \\c #_6 7"))]
+    (is (= {:a 1} (edn/read stream)))
+    (is (= {:b 2} (edn/read stream)))
+    (is (= [3 4]  (edn/read stream)))
+    (is (= 'foo   (edn/read stream)))
+    (is (= :kw    (edn/read stream)))
+    (is (= 123    (edn/read stream)))
+    (is (= 4.5    (edn/read stream)))
+    (is (= \c     (edn/read stream)))
+    (is (= 7      (edn/read stream)))
+    (is (thrown-with-msg? RuntimeException #"EOF" (edn/read stream)))
+    (is (= ::eof  (edn/read {:eof ::eof} stream))))
+
+  ;; reads only as much as needed for one form
+  (let [stream (java.io.PushbackReader. (java.io.StringReader. "12 ab"))]
+    (is (= 12 (edn/read stream)))
+    (is (= (int \space) (.read stream)))
+    (is (= 'ab (edn/read stream))))
+
+  ;; interop with clojure.edn/read on the same stream
+  (let [stream (java.io.PushbackReader. (java.io.StringReader. "{:a 1} {:b 2} {:c 3}"))]
+    (is (= {:a 1} (edn/read stream)))
+    (is (= {:b 2} (clojure.edn/read stream)))
+    (is (= {:c 3} (edn/read stream))))
+
+  (binding [*in* (java.io.PushbackReader. (java.io.StringReader. "1 2"))]
+    (is (= 1 (edn/read)))
+    (is (= 2 (edn/read))))
+
+  (let [stream (java.io.PushbackReader. (java.io.StringReader. "#my/tag 1 #other/tag 2"))]
+    (is (= 2 (edn/read {:readers {'my/tag inc}} stream)))
+    (is (= '[other/tag 2] (edn/read {:default vector} stream)))))
+
 (deftest set-reader-test
   (let [reader (java.io.StringReader. "{:a 1}")
         parser (edn/parser reader)
