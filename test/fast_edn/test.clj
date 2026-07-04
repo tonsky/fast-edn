@@ -316,13 +316,43 @@
     "36RABCXYZ" 36RABCXYZ
     
     ;; extras -- don't work in clojure.edn
-    "2r1111N"   (clojure.lang.BigInt/fromLong 2r1111))
-  
+    "2r1111N"   (clojure.lang.BigInt/fromLong 2r1111)
+
+    ;; issue-7 Cannot read number ending with #
+    "1#"        1
+    "[0#_a]"    [0]
+    "{1/2#{}}"  {1/2 #{}}
+    "[1:kw]"    [1 :kw]
+
+    ;; issue-11 Nested octal numbers are parsed as decimal
+    ;; issue-22 Octal numbers ending in delimiter parsed as decimal
+    "[075]"     [61]
+    "[-075]"    [-61]
+    "[0 010 1]" [0 8 1]
+    "010\""     8
+    "010]"      8
+
+    ;; issues-14 Nested large number is parsed incorrectly
+    ;; issue-21 Large number followed by , parsed incorrectly
+    "1000000000000000000000000," 1000000000000000000000000N
+    "#{100000000000000000000}"   #{100000000000000000000N}
+    "[-100000000000000000000]"   [-100000000000000000000N]
+
+    ;; issue-25 Cannot parse leading zero after radix
+    "10R08"     8
+
+    ;; issue-26 Cannot parse 25RN
+    "25RN"      23)
+
   (are [s] (thrown? Exception (edn/read-string s))
     "08"
     "0x"
     "0xG"
     "1n"
+
+    ;; issue-13 0-1 and 0+1 are recognized as numbers
+    "0-1"
+    "0+1"
     ))
 
 (deftest floats-test
@@ -360,7 +390,10 @@
     "1."      1.
     "1.M"     1.M
     "##Inf"   ##Inf
-    "##-Inf"  ##-Inf)
+    "##-Inf"  ##-Inf
+
+    ;; issue-7 Cannot read number ending with #
+    "[0##Inf]" [0 ##Inf])
   
   ;; not in spec
   (Double/.isNaN (edn/read-string "##NaN"))
@@ -583,14 +616,20 @@
     "2r1000/0177" 8/127
     "1000000000000000000000000000000/2" 1000000000000000000000000000000/2
     "1/-2"        -1/2
-    "-1/-2"       1/2)
-  
+    "-1/-2"       1/2
+
+    ;; leading zero means octal in ratios too, same as in plain ints
+    "010/2"       4
+    "1/010"       1/8)
+
   (are [s] (thrown? Exception (edn/read-string s))
     "1/"
     "/2"
     "1.1/2"
     "1/2.2"
-    "1/2/3"))
+    "1/2/3"
+    "08/1"
+    "1/08"))
   
 
 ;; not in spec
@@ -608,7 +647,7 @@
     ;; extras -- don't work in clojure.edn
     "^[tag] {}"   {:param-tags ['tag]} {}))
 
-(deftest issue-2
+(deftest issue-2 ;; Hash map reading breaks if submaps contain identical keys
   (let [m {:field     :field1
            :condition {:field {:field2 "bar"}}
            :foo1      "bar"
@@ -624,7 +663,7 @@
            :c {:d 3 :e 4}}]
     (is (= m (edn/read-string (pr-str m))))))
 
-(deftest issue-3
+(deftest issue-3 ;; Trailing comment inside a map breaks map parsing
   (is (= (list :a 1)
          (edn/read-string "(:a 1 ;comment\n)")))
   (is (= [:a 1]

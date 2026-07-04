@@ -656,7 +656,23 @@ public class EdnParser {
       char ch = buf[pos];
       if (ch >= '0' && ch <= '9') {
         val = val * 10 + ch - '0';
-      } else if (isBoundary(ch)) {
+      } else if (isNumberBoundary(ch)) {
+        int digits = pos - start;
+        // empty, e.g. denominator in "1/]"
+        if (digits == 0) {
+          break;
+        }
+
+        // octal
+        if (digits > 1 && buf[start] == '0') {
+          break;
+        }
+
+        // can overflow long
+        if (digits >= 19) {
+          break;
+        }
+
         readPos = pos;
         return val;
       } else {
@@ -672,10 +688,11 @@ public class EdnParser {
     accumulatorLength = 0;
     accumulatorAppend(buf, start, pos);
 
-    boolean isInt    = false;
-    boolean isFloat  = false;
-    boolean isRatio  = false;
-    int     radixPos = -1;
+    boolean isInt         = false;
+    boolean isFloat       = false;
+    boolean isRatio       = false;
+    int     radixPos      = -1;
+    boolean misplacedSign = false;
 
     outer:
     while (!isEOF) {
@@ -688,10 +705,21 @@ public class EdnParser {
         char ch = buf[pos];
         if (ch >= '0' && ch <= '9') {
           // pass
-        } else if (isBoundary(ch)) {
+        } else if (isNumberBoundary(ch)) {
           accumulatorAppend(buf, start, pos);
           readPos = pos;
           break outer;
+        } else if (ch == '+' || ch == '-') {
+          if (accumulatorLength + (pos - start) == 0) {
+            // sign first char
+            continue;
+          }
+          char prev = pos > start ? buf[pos - 1] : accumulator[accumulatorLength - 1];
+          if (prev == 'e' || prev == 'E') {
+            // sign after exponent
+            continue;
+          }
+          misplacedSign = true;
         } else if (!isInt && !isFloat && (ch == '.' || ch == 'e' || ch == 'E' || ch == 'M')) {
           isFloat = true;
         } else if (!isInt && !isFloat && (ch == 'x' || ch == 'X' || ch == 'N')) {
@@ -710,6 +738,10 @@ public class EdnParser {
       accumulatorAppend(buf, start, len);
       readPos = pos;
       nextBuffer();
+    }
+
+    if (misplacedSign) {
+      throw new RuntimeException("Invalid number: " + accumulatorToString() + context());
     }
 
     if (isRatio) {
@@ -751,20 +783,25 @@ public class EdnParser {
   }
 
   public Number finalizeInt(char[] buf, int start, int radixPos, int end) {
-    int radix = 10;
+    int radix = -1;
     boolean forceBigInt = false;
-    
+
+    if (end == start) {
+      throw new RuntimeException("Invalid number" + context());
+    }
+
     if (radixPos != -1) {
       radix = (int) Long.parseLong(new String(buf, start, radixPos - start), 10);
       start = radixPos + 1;
     }
 
-    if (buf[end - 1] == 'N') {
+    // trailing N is a BigInt marker only if digits precede it, otherwise it's a digit itself
+    if (buf[end - 1] == 'N' && end - 1 > start) {
       forceBigInt = true;
       end = end - 1;
     }
 
-    if (buf[start] == '0') {
+    if (radix == -1 && buf[start] == '0') {
       if (end - start >= 3 && (buf[start + 1] == 'x' || buf[start + 1] == 'X')) {
         radix = 16;
         start = start + 2;
@@ -772,6 +809,10 @@ public class EdnParser {
         radix = 8;
         start = start + 1;
       }
+    }
+
+    if (radix == -1) {
+      radix = 10;
     }
 
     if (forceBigInt) {
@@ -1167,6 +1208,7 @@ public class EdnParser {
 
   public static final BitSet whitespaceMask = new BitSet(0x30);
   public static final BitSet boundaryMask = new BitSet(0x80);
+  public static final BitSet numberBoundaryMask = new BitSet(0x80);
   
   static {
     whitespaceMask.set('\t');
@@ -1188,6 +1230,10 @@ public class EdnParser {
     boundaryMask.set(']');
     boundaryMask.set('{');
     boundaryMask.set('}');
+
+    numberBoundaryMask.or(boundaryMask);
+    numberBoundaryMask.set('#');
+    numberBoundaryMask.set(':');
   }
 
   public static boolean isWhitespace(int ch) {
@@ -1196,6 +1242,10 @@ public class EdnParser {
 
   public static boolean isBoundary(int ch) {
     return ch < 0x80 && boundaryMask.get(ch);
+  }
+
+  public static boolean isNumberBoundary(int ch) {
+    return ch < 0x80 && numberBoundaryMask.get(ch);
   }
 
   public static String toClassString(Object o) {
