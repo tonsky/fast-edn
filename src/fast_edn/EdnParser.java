@@ -499,10 +499,33 @@ public class EdnParser {
     }
   }
 
+  public void validateToken(char[] buf, int start, int end, String prefix) {
+    char prev = 0;
+    for (int i = start; i < end; ++i) {
+      char ch = buf[i];
+      if (ch == '@' || ch == '`' || ch == '~') {
+        if (i == start && prefix.isEmpty()) {
+          throw new RuntimeException("Invalid leading character: " + ch + context());
+        } else {
+          throw new RuntimeException("Invalid constituent character: " + ch + context());
+        }
+      }
+      if (ch == ':' && prev == ':') {
+        throw new RuntimeException("Invalid token: " + prefix + new String(buf, start, end - start) + context());
+      }
+      prev = ch;
+    }
+    if (prev == ':') {
+      throw new RuntimeException("Invalid token: " + prefix + new String(buf, start, end - start) + context());
+    }
+  }
+
   public Object finalizeSymbol(char[] buf, int start, int slash, int end) {
     if (end == start) {
       throw new RuntimeException("Symbol can't be empty" + context());
     }
+
+    validateToken(buf, start, end, "");
 
     if (1 == end - start && buf[start] == '/') {
       return Symbol.intern(null, "/");
@@ -620,6 +643,12 @@ public class EdnParser {
       throw new RuntimeException("Keyword can't be empty" + context());
     }
 
+    if (buf[start] == ':') {
+      throw new RuntimeException("Invalid token: :" + new String(buf, start, end - start) + context());
+    }
+
+    validateToken(buf, start, end, ":");
+
     if (1 == end - start && buf[start] == '/') {
       return Keyword.intern(Symbol.intern(null, "/"));
     }
@@ -629,6 +658,20 @@ public class EdnParser {
     }
 
     if (slash == start) {
+      // clojure.edn reads keywords like ://a and :/!/! as (keyword "" "/a") and (keyword "" "!/!"),
+      // but only when the part after : contains both '/' and non-'/' characters
+      boolean hasSlash = false;
+      boolean hasOther = false;
+      for (int i = start + 1; i < end; ++i) {
+        if (buf[i] == '/') {
+          hasSlash = true;
+        } else {
+          hasOther = true;
+        }
+      }
+      if (hasSlash && hasOther) {
+        return Keyword.intern(Symbol.intern("", new String(buf, start + 1, end - start - 1)));
+      }
       throw new RuntimeException("Keyword's namespace can't be empty: " + new String(buf, start, end - start) + context());
     }
 

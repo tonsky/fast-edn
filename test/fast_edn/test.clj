@@ -228,9 +228,23 @@
     "ns/"
     "/sym"
     "//"
-    "1a"    
+    "1a"
     "-1a"
-    "+1a"))
+    "+1a"
+
+    ;; issue #9 -- : can't end a symbol or double up
+    "A0:"
+    "A0::a"
+    "A:::"
+
+    ;; issue #16 -- ` ~ @ are not valid symbol characters
+    "`"
+    "~"
+    "@"
+    "~@"
+    "a`b"
+    "a~b"
+    "a@b"))
     
 
 (deftest keywords-test
@@ -268,7 +282,11 @@
 
     ;; issues #19, #20 -- comment and meta terminate keyword
     ":$;asdf"        :$
-    ":$^:a[]"        :$)
+    ":$^:a[]"        :$
+
+    ;; issues #17, #24 -- empty namespace when name contains slashes
+    "://a"           (keyword "" "/a")
+    ":/!/!"          (keyword "" "!/!"))
   
   (are [s] (thrown? Exception (edn/read-string s))
     ":"
@@ -277,7 +295,15 @@
     ":ns/"
     ":/sym"
     "://"
-    
+
+    ;; issue #9 -- : can't start a keyword name, end it or double up
+    ":A0:"
+    ":A0::a"
+    "::A0:a"
+    ":::::A0:a"
+    "::::A:::"
+    "::"
+
     ;; extras -- don't work in clojure.edn
     ":///"))
 
