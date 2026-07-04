@@ -646,6 +646,10 @@ public class EdnParser {
   ////////////////
 
   public Number readNumber() {
+    return readNumber(false);
+  }
+
+  public Number readNumber(boolean inRatio) {
     char[] buf   = readBuf;
     int    start = readPos;
     int    pos   = start;
@@ -656,19 +660,24 @@ public class EdnParser {
       char ch = buf[pos];
       if (ch >= '0' && ch <= '9') {
         val = val * 10 + ch - '0';
-      } else if (isBoundary(ch)) {
-        readPos = pos;
-        return val;
+      } else if (isBoundary(ch) || ch == '#') {
+        int digits = pos - start;
+        // leading zero means octal, 19+ digits can overflow long
+        if (digits >= 1 && digits <= 18 && (digits == 1 || buf[start] != '0')) {
+          readPos = pos;
+          return val;
+        }
+        break;
       } else {
         break;
       }
     }
 
     readPos = pos;
-    return readNumberComplex(buf, start, pos);
+    return readNumberComplex(buf, start, pos, inRatio);
   }
 
-  public Number readNumberComplex(char[] buf, int start, int pos) {
+  public Number readNumberComplex(char[] buf, int start, int pos, boolean inRatio) {
     accumulatorLength = 0;
     accumulatorAppend(buf, start, pos);
 
@@ -676,6 +685,7 @@ public class EdnParser {
     boolean isFloat  = false;
     boolean isRatio  = false;
     int     radixPos = -1;
+    boolean invalid  = false;
 
     outer:
     while (!isEOF) {
@@ -688,10 +698,18 @@ public class EdnParser {
         char ch = buf[pos];
         if (ch >= '0' && ch <= '9') {
           // pass
-        } else if (isBoundary(ch)) {
+        } else if (isBoundary(ch) || ch == '#') {
           accumulatorAppend(buf, start, pos);
           readPos = pos;
           break outer;
+        } else if (ch == '+' || ch == '-') {
+          // sign is only allowed at the very start or in a float exponent
+          if (accumulatorLength + (pos - start) > 0) {
+            char prev = pos > start ? buf[pos - 1] : accumulator[accumulatorLength - 1];
+            if (prev != 'e' && prev != 'E') {
+              invalid = true;
+            }
+          }
         } else if (!isInt && !isFloat && (ch == '.' || ch == 'e' || ch == 'E' || ch == 'M')) {
           isFloat = true;
         } else if (!isInt && !isFloat && (ch == 'x' || ch == 'X' || ch == 'N')) {
@@ -712,8 +730,12 @@ public class EdnParser {
       nextBuffer();
     }
 
+    if (invalid) {
+      throw new RuntimeException("Invalid number: " + accumulatorToString() + context());
+    }
+
     if (isRatio) {
-      Number numerator = finalizeInt(accumulator, 0, radixPos, accumulatorLength);
+      Number numerator = finalizeInt(accumulator, 0, radixPos, accumulatorLength, true);
       return finalizeRatio(numerator);
     }
 
@@ -721,7 +743,7 @@ public class EdnParser {
       return finalizeFloat(accumulator, 0, accumulatorLength);
     }
 
-    return finalizeInt(accumulator, 0, radixPos, accumulatorLength);
+    return finalizeInt(accumulator, 0, radixPos, accumulatorLength, inRatio);
   }
 
   public Number finalizeRatio(Number numerator) {
@@ -731,7 +753,7 @@ public class EdnParser {
     }
     numerator = numerator instanceof Long ? BigInteger.valueOf((Long) numerator) : (BigInteger) numerator;
 
-    Number denominator = readNumber();
+    Number denominator = readNumber(true);
     denominator = denominator instanceof BigInt ? Numbers.reduceBigInt((BigInt) denominator) : denominator;
     if (!(denominator instanceof Long || denominator instanceof BigInteger)) {
       throw new RuntimeException("Denominator can't be " + denominator.getClass().getName() + ": " + denominator + context());
@@ -751,26 +773,52 @@ public class EdnParser {
   }
 
   public Number finalizeInt(char[] buf, int start, int radixPos, int end) {
+    return finalizeInt(buf, start, radixPos, end, false);
+  }
+
+  public Number finalizeInt(char[] buf, int start, int radixPos, int end, boolean inRatio) {
     int radix = 10;
     boolean forceBigInt = false;
-    
+
+    if (end == start) {
+      throw new RuntimeException("Invalid number" + context());
+    }
+
     if (radixPos != -1) {
       radix = (int) Long.parseLong(new String(buf, start, radixPos - start), 10);
       start = radixPos + 1;
-    }
+      // trailing N is a BigInt marker only if digits precede it, otherwise it's a digit itself
+      if (buf[end - 1] == 'N' && end - 1 > start) {
+        forceBigInt = true;
+        end = end - 1;
+      }
+    } else {
+      if (buf[end - 1] == 'N') {
+        forceBigInt = true;
+        end = end - 1;
+      }
 
-    if (buf[end - 1] == 'N') {
-      forceBigInt = true;
-      end = end - 1;
-    }
-
-    if (buf[start] == '0') {
-      if (end - start >= 3 && (buf[start + 1] == 'x' || buf[start + 1] == 'X')) {
-        radix = 16;
-        start = start + 2;
-      } else if (end - start >= 2) {
-        radix = 8;
-        start = start + 1;
+      if (end > start && buf[start] == '0') {
+        if (end - start >= 3 && (buf[start + 1] == 'x' || buf[start + 1] == 'X')) {
+          radix = 16;
+          start = start + 2;
+        } else if (end - start >= 2) {
+          // in ratios clojure.edn reads leading zero as decimal (08/1 == 8),
+          // only use fast-edn's octal extension when all digits fit
+          boolean octal = true;
+          if (inRatio) {
+            for (int i = start + 1; i < end; ++i) {
+              if (buf[i] < '0' || buf[i] > '7') {
+                octal = false;
+                break;
+              }
+            }
+          }
+          if (octal) {
+            radix = 8;
+            start = start + 1;
+          }
+        }
       }
     }
 

@@ -316,13 +316,40 @@
     "36RABCXYZ" 36RABCXYZ
     
     ;; extras -- don't work in clojure.edn
-    "2r1111N"   (clojure.lang.BigInt/fromLong 2r1111))
-  
+    "2r1111N"   (clojure.lang.BigInt/fromLong 2r1111)
+
+    ;; issue #7
+    "1#"        1
+    "[0#_a]"    [0]
+    "{1/2#{}}"  {1/2 #{}}
+
+    ;; issues #11, #22
+    "[075]"     [61]
+    "[-075]"    [-61]
+    "[0 010 1]" [0 8 1]
+    "010\""     8
+    "010]"      8
+
+    ;; issues #14, #21
+    "1000000000000000000000000," 1000000000000000000000000N
+    "#{100000000000000000000}"   #{100000000000000000000N}
+    "[-100000000000000000000]"   [-100000000000000000000N]
+
+    ;; issue #25
+    "10R08"     8
+
+    ;; issue #26
+    "25RN"      23)
+
   (are [s] (thrown? Exception (edn/read-string s))
     "08"
     "0x"
     "0xG"
     "1n"
+
+    ;; issue #13
+    "0-1"
+    "0+1"
     ))
 
 (deftest floats-test
@@ -360,7 +387,10 @@
     "1."      1.
     "1.M"     1.M
     "##Inf"   ##Inf
-    "##-Inf"  ##-Inf)
+    "##-Inf"  ##-Inf
+
+    ;; issue #7
+    "[0##Inf]" [0 ##Inf])
   
   ;; not in spec
   (Double/.isNaN (edn/read-string "##NaN"))
@@ -583,7 +613,12 @@
     "2r1000/0177" 8/127
     "1000000000000000000000000000000/2" 1000000000000000000000000000000/2
     "1/-2"        -1/2
-    "-1/-2"       1/2)
+    "-1/-2"       1/2
+
+    ;; issue #27 -- leading zero is decimal in ratios, unless valid octal
+    "08/1"        8
+    "1/08"        1/8
+    "010/2"       4)
   
   (are [s] (thrown? Exception (edn/read-string s))
     "1/"
