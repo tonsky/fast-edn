@@ -1210,14 +1210,24 @@ public class EdnParser {
           }
 
           if (ch2 == ':') {
+            int ch3 = skipWhitespace();
+            if (ch3 == -1) {
+              throw new RuntimeException("EOF while reading namespaced map" + context());
+            }
+            unread();
             Keyword ns = (Keyword) readKeyword();
 
             if (ns.getNamespace() != null) {
               throw new RuntimeException("Namespaced map should use non-namespaced keyword: " + ns + context());
             }
 
-            int ch3 = skipWhitespace();
-            if (ch3 != '{') {
+            char nsFirst = ns.getName().charAt(0);
+            if (nsFirst >= '0' && nsFirst <= '9') {
+              throw new RuntimeException("Namespaced map must specify a valid namespace: " + ns.getName() + context());
+            }
+
+            int ch4 = skipWhitespace();
+            if (ch4 != '{') {
               throw new RuntimeException("Namespaced map must specify a map: " + ns + context());
             }
 
