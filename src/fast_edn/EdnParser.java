@@ -153,6 +153,15 @@ public class EdnParser {
     return skip(EdnParser::isWhitespace);
   }
 
+  public boolean peekBoundary() {
+    int ch = read();
+    if (ch == -1) {
+      return true;
+    }
+    unread();
+    return isBoundary(ch);
+  }
+
   public boolean compareNext(int ch, String s) {
     if ((char) ch != s.charAt(0)) {
       return false;
@@ -497,6 +506,19 @@ public class EdnParser {
       accumulator[0] = ch;
       return readSymbolComplex(accumulator, 0, -1, 1);
     }
+  }
+
+  public String continueReadingUntilBoundary(String alreadyRead) {
+    StringBuilder sb = new StringBuilder(alreadyRead);
+    int ch = read();
+    while (ch != -1 && !isBoundary(ch)) {
+      sb.append((char) ch);
+      ch = read();
+    }
+    if (ch != -1) {
+      unread();
+    }
+    return sb.toString();
   }
 
   public Object finalizeSymbol(char[] buf, int start, int slash, int end) {
@@ -862,15 +884,48 @@ public class EdnParser {
 
   public Double readSymbolicValue() {
     int ch = read();
-    if (compareNext(ch, "Inf")) {
-      return Double.POSITIVE_INFINITY;
-    } else if (compareNext(ch, "-Inf")) {
-      return Double.NEGATIVE_INFINITY;
-    } else if (compareNext(ch, "NaN")) {
-      return Double.NaN;
-    } else {
-      throw new RuntimeException("Unknown symbolic value" + context());
+
+    if (ch == -1) {
+      throw new RuntimeException("EOF while reading symbolic value" + context());
     }
+
+    Double val  = null;
+    String expected = null;
+
+    if (ch == 'I') {
+      val  = Double.POSITIVE_INFINITY;
+      expected = "Inf";
+    } else if (ch == '-') {
+      val  = Double.NEGATIVE_INFINITY;
+      expected = "-Inf";
+    } else if (ch == 'N') {
+      val  = Double.NaN;
+      expected = "NaN";
+    }
+
+    StringBuilder alreadyRead = new StringBuilder();
+    alreadyRead.append((char) ch);
+
+    boolean matched = expected != null;
+    for (int i = 1; matched && i < expected.length(); ++i) {
+      int ch2 = read();
+      if (ch2 == -1) {
+        matched = false;
+      } else if (isBoundary(ch2)) {
+        unread();
+        matched = false;
+      } else {
+        alreadyRead.append((char) ch2);
+        matched = ch2 == expected.charAt(i);
+      }
+    }
+
+    if (matched && peekBoundary()) {
+      return val;
+    }
+
+    String symbol = continueReadingUntilBoundary(alreadyRead.toString());
+    throw new RuntimeException("Unknown symbolic value: ##" + symbol + context());
   }
 
 

@@ -486,6 +486,7 @@
     "1.M"     1.M
     "##Inf"   ##Inf
     "##-Inf"  ##-Inf
+    "##Inf;"  ##Inf
 
     ;; issue-7 -- Cannot read number ending with #
     "[0##Inf]" [0 ##Inf])
@@ -501,7 +502,24 @@
     "##inf"
     "##INF"
     "##In"
-    "##+NaN"))
+    "##+NaN"
+
+    ;; issue-10 -- symbolic value must be followed by a boundary
+    "##Inf-1"
+    "#{##Inf-1}"
+    "##NaN1"
+    "##Infx")
+
+  ;; issue-10 -- error should report full symbol that was read
+  (are [s m] (thrown-with-msg? Exception m (edn/read-string s))
+    "##-InF"     #"Unknown symbolic value: ##-InF"
+    "##Inf123"   #"Unknown symbolic value: ##Inf123"
+    "##Inf-1"    #"Unknown symbolic value: ##Inf-1"
+    "##NaNa"     #"Unknown symbolic value: ##NaNa"
+    "##In"       #"Unknown symbolic value: ##In"
+    "##x1"       #"Unknown symbolic value: ##x1"
+    "##nil"      #"Unknown symbolic value: ##nil"
+    "##Inf/"     #"Unknown symbolic value: ##Inf/"))
 
 
 (deftest lists-test
