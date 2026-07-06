@@ -420,13 +420,26 @@ public class EdnParser {
 
     if (ch == 'u') {
       ch = readUnicodeChar();
+      if (!peekBoundary()) {
+        String rest = continueReadingUntilBoundary("");
+        throw new RuntimeException("Invalid character constant: \\u" + String.format("%04x", ch) + rest + context());
+      }
       // surrogate code unit?
       if (ch >= 0xD800 && ch <= 0xDFFF) {
-        throw new RuntimeException("Invalid character constant: \\u" + new Formatter().format("%04d", ch) + context());
+        throw new RuntimeException("Invalid character constant: \\u" + String.format("%04x", ch) + context());
       }
       return Character.valueOf((char) ch);
     } else if (ch == 'o') {
-      return Character.valueOf(readOctalChar());
+      if (peek < '0' || peek > '7') {
+        String rest = continueReadingUntilBoundary("");
+        throw new RuntimeException("Invalid character constant: \\o" + rest + context());
+      }
+      ch = readOctalChar();
+      if (!peekBoundary()) {
+        String rest = continueReadingUntilBoundary("");
+        throw new RuntimeException("Invalid character constant: \\o" + Integer.toString(ch, 8) + rest + context());
+      }
+      return Character.valueOf((char) ch);
     }
     // important that all constants start with different letter
     else if (compareNext(ch, "newline", "Invalid character constant: \\")) {
@@ -896,6 +909,7 @@ public class EdnParser {
       throw new RuntimeException("EOF while reading symbolic value" + context());
     }
 
+    // important that all constants start with different letter
     if (compareNext(ch, "Inf", "Unknown symbolic value: ##")) {
       return Double.POSITIVE_INFINITY;
     } else if (compareNext(ch, "-Inf", "Unknown symbolic value: ##")) {
@@ -1296,6 +1310,10 @@ public class EdnParser {
 
   public static boolean isWhitespace(int ch) {
     return ch < 0x30 && whitespaceMask.get(ch);
+  }
+
+  public static boolean isHexDigit(int ch) {
+    return ('0' <= ch && ch <= '9') || ('a' <= ch && ch <= 'f') || ('A' <= ch && ch <= 'F');
   }
 
   public static boolean isBoundary(int ch) {

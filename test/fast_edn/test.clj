@@ -208,16 +208,31 @@
     "\\spacex"     #"Invalid character constant: \\spacex, offset"
     "\\taboo"      #"Invalid character constant: \\taboo, offset"
     "\\back"       #"Invalid character constant: \\back, offset"
-    "\\formfeed2"  #"Invalid character constant: \\formfeed2, offset")
+    "\\formfeed2"  #"Invalid character constant: \\formfeed2, offset"
+    "\\uD800"      #"Invalid character constant: \\ud800, offset"
+    "\\uDFFF"      #"Invalid character constant: \\udfff, offset"
+
+    ;; issue-8 -- octal and named characters must be followed by a boundary
+    "\\ua66ex"     #"Invalid character constant: \\ua66ex, offset"
+    "\\uA66EX"     #"Invalid character constant: \\ua66eX, offset"
+    "\\uz"         #"Unexpected digit: z, offset"
+    "\\u0z"        #"Unexpected digit: z, offset"
+    "\\oz"         #"Invalid character constant: \\oz, offset"
+    "\\ormfeed"    #"Invalid character constant: \\ormfeed, offset"
+    "\\o-1/2"      #"Invalid character constant: \\o-1/2, offset"
+    "#{\\o-1/2}"   #"Invalid character constant: \\o-1/2, offset"
+    "\\o12x"       #"Invalid character constant: \\o12x, offset"
+    "\\o8"         #"Invalid character constant: \\o8, offset")
 
   (are [s] (thrown? Exception (edn/read-string s))
     "\\u20"
     "\\"
     "\\new"
     "\\wh"
-    "\\uD800"
-    "\\uDFFF"
-    "\\0378"))
+    "\\0378"
+    "\\space-1"
+    "#{\\space-1}"
+    "\\newline5"))
 
 (deftest symbols-test
   (are [s e] (= e (edn/read-string s))
