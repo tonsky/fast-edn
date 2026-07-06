@@ -162,20 +162,25 @@ public class EdnParser {
     return isBoundary(ch);
   }
 
-  public boolean compareNext(int ch, String s) {
+  public boolean compareNext(int ch, String s, String error) {
     if ((char) ch != s.charAt(0)) {
       return false;
     }
 
     for (int i = 1; i < s.length(); ++i) {
       ch = read();
-      if (ch == -1) {
-        throw new RuntimeException("EOF while reading" + context());
-      }
-      if ((char) ch != s.charAt(i)) {
-        return false;
+      if (ch == -1 || (char) ch != s.charAt(i)) {
+        if (ch != -1) {
+          unread();
+        }
+        throw new RuntimeException(error + continueReadingUntilBoundary(s.substring(0, i)) + context());
       }
     }
+
+    if (!peekBoundary()) {
+      throw new RuntimeException(error + continueReadingUntilBoundary(s) + context());
+    }
+
     return true;
   }
   
@@ -422,17 +427,19 @@ public class EdnParser {
       return Character.valueOf((char) ch);
     } else if (ch == 'o') {
       return Character.valueOf(readOctalChar());
-    } else if (compareNext(ch, "newline")) {
+    }
+    // important that all constants start with different letter
+    else if (compareNext(ch, "newline", "Invalid character constant: \\")) {
       return '\n';
-    } else if (compareNext(ch, "return")) {
+    } else if (compareNext(ch, "return", "Invalid character constant: \\")) {
       return '\r';
-    } else if (compareNext(ch, "space")) {
+    } else if (compareNext(ch, "space", "Invalid character constant: \\")) {
       return ' ';
-    } else if (compareNext(ch, "tab")) {
+    } else if (compareNext(ch, "tab", "Invalid character constant: \\")) {
       return '\t';
-    } else if (compareNext(ch, "backspace")) {
+    } else if (compareNext(ch, "backspace", "Invalid character constant: \\")) {
       return '\b';
-    } else if (compareNext(ch, "formfeed")) {
+    } else if (compareNext(ch, "formfeed", "Invalid character constant: \\")) {
       return '\f';
     }
 
@@ -889,42 +896,15 @@ public class EdnParser {
       throw new RuntimeException("EOF while reading symbolic value" + context());
     }
 
-    Double val  = null;
-    String expected = null;
-
-    if (ch == 'I') {
-      val  = Double.POSITIVE_INFINITY;
-      expected = "Inf";
-    } else if (ch == '-') {
-      val  = Double.NEGATIVE_INFINITY;
-      expected = "-Inf";
-    } else if (ch == 'N') {
-      val  = Double.NaN;
-      expected = "NaN";
+    if (compareNext(ch, "Inf", "Unknown symbolic value: ##")) {
+      return Double.POSITIVE_INFINITY;
+    } else if (compareNext(ch, "-Inf", "Unknown symbolic value: ##")) {
+      return Double.NEGATIVE_INFINITY;
+    } else if (compareNext(ch, "NaN", "Unknown symbolic value: ##")) {
+      return Double.NaN;
     }
 
-    StringBuilder alreadyRead = new StringBuilder();
-    alreadyRead.append((char) ch);
-
-    boolean matched = expected != null;
-    for (int i = 1; matched && i < expected.length(); ++i) {
-      int ch2 = read();
-      if (ch2 == -1) {
-        matched = false;
-      } else if (isBoundary(ch2)) {
-        unread();
-        matched = false;
-      } else {
-        alreadyRead.append((char) ch2);
-        matched = ch2 == expected.charAt(i);
-      }
-    }
-
-    if (matched && peekBoundary()) {
-      return val;
-    }
-
-    String symbol = continueReadingUntilBoundary(alreadyRead.toString());
+    String symbol = continueReadingUntilBoundary(String.valueOf((char) ch));
     throw new RuntimeException("Unknown symbolic value: ##" + symbol + context());
   }
 

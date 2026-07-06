@@ -187,8 +187,29 @@
     ;; issue-23 -- Cannot parse character followed by ^ or ;
     "\\ ;"        \space
     "\\ ^:a[]"    \space
-    "\\a;b"       \a)
-  
+    "\\a;b"       \a
+
+    ;; character followed by a boundary
+    "[\\newline]"          [\newline]
+    "[\\newline \\return]" [\newline \return]
+    "[\\newline\\return]"  [\newline \return]
+    "[\\a\\newline\\b]"    [\a \newline \b]
+    "\\newline,"           \newline
+    "\\tab;comment"        \tab
+    "\\space\"str\""       \space)
+
+  (are [s m] (thrown-with-msg? Exception m (edn/read-string s))
+    "\\newlinefff" #"Invalid character constant: \\newlinefff, offset"
+    "\\newl"       #"Invalid character constant: \\newl, offset"
+    "\\newl],,  "  #"Invalid character constant: \\newl, offset"
+    "[\\newl]"     #"Invalid character constant: \\newl, offset"
+    "\\ret"        #"Invalid character constant: \\ret, offset"
+    "\\returns"    #"Invalid character constant: \\returns, offset"
+    "\\spacex"     #"Invalid character constant: \\spacex, offset"
+    "\\taboo"      #"Invalid character constant: \\taboo, offset"
+    "\\back"       #"Invalid character constant: \\back, offset"
+    "\\formfeed2"  #"Invalid character constant: \\formfeed2, offset")
+
   (are [s] (thrown? Exception (edn/read-string s))
     "\\u20"
     "\\"
