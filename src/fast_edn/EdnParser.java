@@ -1056,9 +1056,14 @@ public class EdnParser {
     try {
       return readObject(throwOnEOF);
     } catch (Exception e) {
+      String message = e.getMessage();
+      // exceptions thrown by the parser itself already carry context()
+      if (message != null && message.contains(", offset: ")) {
+        throw Util.sneakyThrow(e);
+      }
       Exception e2 = null;
       try {
-        e2 = e.getClass().getDeclaredConstructor(String.class).newInstance(e.getMessage() + context());
+        e2 = e.getClass().getDeclaredConstructor(String.class).newInstance(message + context());
         e2.setStackTrace(e.getStackTrace());
       } catch (Exception t3) {
         throw Util.sneakyThrow(e);
