@@ -175,7 +175,7 @@ public class EdnParser {
       return "";
     }
 
-    int start = readPos;
+    int start = Math.min(readPos, readLen - 1);
     for (; start > Math.max(0, readPos - 100); --start) {
       int ch = readBuf[start];
       if (ch == '\n' || ch == '\r') {
@@ -204,7 +204,7 @@ public class EdnParser {
       position = ", line: " + (line + 1) + ", column: " + (column + 1) + position;
     }
     
-    final char[] indentArray = new char[readPos - start - 1];
+    final char[] indentArray = new char[Math.max(0, readPos - start - 1)];
     Arrays.fill(indentArray, ' ');
     String indent = new String(indentArray);
 

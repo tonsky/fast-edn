@@ -148,6 +148,17 @@
         "\\u0040" "@"))))
 
 
+(deftest context-buf-test
+  ;; context() shouldn't crash when error happens at buffer capacity or right after refill
+  (doseq [buf (range 1 11)]
+    (testing (str "buffer " buf)
+      (are [s m] (thrown-with-msg? Exception m (edn/read-string {:buffer buf} s))
+        "{"       #"EOF while reading"
+        "abc/ "   #"Symbol's name can't be empty: abc/"
+        "##-InF"  #"Unknown symbolic value: ##-InF"
+        "##Inf-1" #"Unknown symbolic value: ##Inf-1"))))
+
+
 (deftest chars-test
   (are [s e] (= e (edn/read-string s))
     "\\c"         \c
