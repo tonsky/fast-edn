@@ -41,29 +41,3 @@
     (clj-reload/reload {:only re})
     (let [{:keys [fail error]} (test/run re)]
       (System/exit (+ fail error)))))
-
-
-; benchmarks
-
-(defn -bench-json [_]
-  (compile-java)
-  (require 'bench)
-  (@(resolve 'bench/bench)
-   {:files   #".*\.json"
-    :parsers (keys @(resolve 'bench/json-parsers))}))
-
-(defn -bench-edn [_]
-  (compile-java)
-  (require 'bench)
-  (@(resolve 'bench/bench)
-   {:files   #".*\.edn"
-    :parsers (keys @(resolve 'bench/edn-parsers))}))
-
-(defn -bench-transit [_]
-  (compile-java)
-  (require 'bench)
-  (@(resolve 'bench/bench)
-   {:files   #"transit_.*"
-    :parsers (concat
-               (keys @(resolve 'bench/transit-json-parsers))
-               (keys @(resolve 'bench/transit-msgpack-parsers)))}))

@@ -24,4 +24,6 @@
               "-XX:+DebugNonSafepoints"
               "-XX:+EnableDynamicAgentLoading"
               #_"-XX:+UnlockDiagnosticVMOptions"
-              #_"-XX:+LogCompilation"]}}}
+              #_"-XX:+LogCompilation"]}
+  :bench
+  {:extra-paths ["target/classes"]}}}

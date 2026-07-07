@@ -2,23 +2,23 @@
 
 > EDN format is very similar to JSON, thus it should parse as fast as JSON.
 
-Fast EDN is a drop-in replacement for `clojure.edn/read-string` that is roughly 6 times faster:
+Fast EDN is a drop-in replacement for `clojure.edn/read-string` that is roughly 5-7 times faster:
 
 | Test file         | clojure.edn | fast-edn.core | speed up, times |
 | :---              |        ---: |          ---: |            ---: |
-| basic_10          |       0.504 |         0.290 |          ×  1.7 |
-| basic_100         |       3.040 |         0.594 |          ×  5.1 |
-| basic_1000        |      19.495 |         2.815 |          ×  6.9 |
-| basic_10000       |     221.773 |        37.560 |          ×  5.9 |
-| basic_100000      |    2138.255 |       370.045 |          ×  5.8 |
-| ints_1400         |     431.432 |        33.164 |          × 13.0 |
-| keywords_10       |       3.961 |         0.625 |          ×  6.3 |
-| keywords_100      |      34.980 |         4.769 |          ×  7.3 |
-| keywords_1000     |     369.404 |        53.943 |          ×  6.8 |
-| keywords_10000    |    4168.732 |       662.099 |          ×  6.3 |
-| nested_100000     |    2585.372 |       503.644 |          ×  5.1 |
-| strings_1000      |     651.043 |        40.455 |          × 16.1 |
-| strings_uni_250   |     641.900 |       108.341 |          ×  5.9 |
+| basic_10          |       0.314 |         0.222 |          ×  1.4 |
+| basic_100         |       1.773 |         0.414 |          ×  4.3 |
+| basic_1000        |      11.075 |         2.063 |          ×  5.4 |
+| basic_10000       |     131.895 |        27.183 |          ×  4.9 |
+| basic_100000      |    1282.128 |       262.327 |          ×  4.9 |
+| ints_1400         |     267.529 |        16.955 |          × 15.8 |
+| keywords_10       |       2.431 |         0.443 |          ×  5.5 |
+| keywords_100      |      21.885 |         3.084 |          ×  7.1 |
+| keywords_1000     |     243.727 |        34.807 |          ×  7.0 |
+| keywords_10000    |    2686.706 |       418.102 |          ×  6.4 |
+| nested_100000     |    1570.673 |       320.779 |          ×  4.9 |
+| strings_1000      |     337.831 |        30.289 |          × 11.2 |
+| strings_uni_250   |     334.157 |        48.338 |          ×  6.9 |
 
 Fast EDN achieves JSON parsing speeds (json + keywordize keys vs EDN of the same size):
 
@@ -34,13 +34,13 @@ Speed of EDN parsing makes Transit obsolete on JVM:
 
 | file         | clojure.edn | transit+msgpack | transit+json |   fast-edn |
 | :---         |        ---: |            ---: |         ---: |       ---: |
-| basic_10     |       0.481 |           2.832 |        1.474 |      0.290 |
-| basic_100    |       2.799 |           4.242 |        2.297 |      0.594 |
-| basic_1000   |      17.548 |          14.738 |        6.583 |      2.815 |
-| basic_10000  |     211.536 |         125.741 |       46.849 |     37.560 |
-| basic_100000 |    2016.885 |        1167.972 |      447.013 |    370.045 |
+| basic_10     |       0.318 |           1.524 |        1.716 |      0.228 |
+| basic_100    |       2.097 |           1.963 |        2.186 |      0.436 |
+| basic_1000   |      12.275 |           4.394 |        5.238 |      2.161 |
+| basic_10000  |     132.793 |          27.562 |       35.861 |     28.806 |
+| basic_100000 |    1258.169 |         244.902 |      334.743 |    277.867 |
 
-All execution times above are in µs, M1 Pro 16 Gb, single thread, JDK Zulu23.30+13-CA.
+All execution times above are in µs, M4 Air 32 Gb, single thread, JDK Temurin-26.0.1+8.
 
 To run benchmarks yourself:
 
@@ -106,7 +106,7 @@ Optionally, you can include line number/column information at the cost of a litt
 Add this to `deps.edn`:
 
 ```clojure
-io.github.tonsky/fast-edn {:mvn/version "1.1.3"}
+io.github.tonsky/fast-edn {:mvn/version "1.2.0"}
 ```
 
 `read-string` works exactly the same as in `clojure.edn`:
@@ -151,27 +151,29 @@ In Fast EDN:
 
 ## Compatibility
 
-Fast EDN is 100% compatible with clojure.edn. It will read everything that clojure.edn would.
+Fast EDN would read almost 100% of what clojure.edn would. Exceptions to that rule are edge cases:
 
-Most cases that clojure.edn rejects, Fast EDN will reject too. There are some minor exceptions though: Fast EDN is a tiny bit more permissive than clojure.edn. We tried to follow intent and just simplify/streamline edge cases where it made sense.
+- keywords without nameaspace (`:/kw`),
+- symbols that begin with quoute (`'sym`, clojure.edn includes the quotation mark as part of the symbols’ name),
+- leading zeros in ration (`08/1` in Clojure reads as 8, we treat `0` as an octal marker).
 
-In Fast EDN, ratios can be specified with arbitrary integers:
+We also _extend_ what can be read where it made sense/made things more consistent. For example, in Fast EDN, ratios can be specified with arbitrary integers:
 
 ```clojure
-(clojure.edn/read-string "2r1111N")
-; => NumberFormatException: For input string: "1111N" under radix 2
-
-(fast-edn.core/read-string "2r1111N")
-; => 15N
-
 (clojure.edn/read-string "0xFF/0x02")
 ; => NumberFormatException: Invalid number: 0xFF/0x02
 
 (fast-edn.core/read-string "0xFF/0x02")
 ; => 255/2
+
+(clojure.edn/read-string "2r1111N")
+; => NumberFormatException: For input string: "1111N" under radix 2
+
+(fast-edn.core/read-string "2r1111N")
+; => 15N
 ```
 
-Symbols/keywords can have slashes anywhere, first slash is ns separator. Clojure allows them _almost_ anywhere but rules for when it doesn’t are _weird_:
+Symbols/keywords can have slashes anywhere, first slash is ns separator. Clojure allows them _almost_ anywhere but rules for when it doesn’t are inconsistent:
 
 ```clojure
 (clojure.edn/read-string ":ns/sym/")
@@ -228,6 +230,6 @@ Fast EDN achieves its speed mainly by avoiding two things clojure.edn does:
 
 ## License
 
-Copyright © 2024 Nikita Prokopov
+Copyright © 2024-2026 Nikita Prokopov
 
 Licensed under [MIT](LICENSE).

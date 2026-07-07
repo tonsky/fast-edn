@@ -3,4 +3,4 @@ set -o errexit -o nounset -o pipefail
 cd "`dirname $0`/.."
 
 lein javac
-clojure -X:dev bench/-bench-transit
+clojure -X:dev:bench bench/-main
