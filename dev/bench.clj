@@ -285,7 +285,9 @@
 (comment
   (gen-ints 1400)
   (quick-bench (fast-edn.core/read-string ints-1400))
-  (bench {:files #"ints_\d+\.edn"}))
+  (bench {:files #"ints_\d+\.edn"
+          :parsers ["fast-edn"]}))
+
 
 ; ┌───────────┬─────────────┬──────────────┬───────────┐
 ; │     :file │ clojure.edn │ tools.reader │  fast-edn │

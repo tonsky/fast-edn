@@ -473,7 +473,33 @@
     "10R08"     8
 
     ;; issue-26 -- Cannot parse 25RN
-    "25RN"      23)
+    "25RN"      23
+
+    ;; issue-29 -- Support underscore literals
+    "1_000"       1000
+    "1_000_000"   1000000
+    "4____2"      42
+    "1234_5678_9012_3456"        1234567890123456
+    "+1_0"        10
+    "-1_0"        -10
+    "-1_234"      -1234
+    "1_0N"        10N
+    "1_234_567_890_123_456_789N" 1234567890123456789N
+    "9_223_372_036_854_775_808"  9223372036854775808N
+    "07_77"       0777
+    "0_77"        077
+    "0xDE_AD_BE_EF" 0xDEADBEEF
+    "0xFF_EC_DE_5E" 0xFFECDE5E
+    "-0xF_F"      -0xFF
+    "0xF_FN"      0xFFN
+    "2r1010_1010" 2r10101010
+    "2R1010_1010" 2R10101010
+    "36rZ_Z"      36rZZ
+    "2r1010_1010N" (clojure.lang.BigInt/fromLong 2r10101010)
+    "[1_000 2_000 3_000]" [1000 2000 3000]
+
+    ;; issue-29 -- leading underscore is a symbol, not a number
+    "_123"        '_123)
 
   (are [s] (thrown? Exception (edn/read-string s))
     "08"
@@ -484,7 +510,23 @@
     ;; issue-13 -- 0-1 and 0+1 are recognized as numbers
     "0-1"
     "0+1"
-    ))
+
+    ;; issue-29 -- underscores must be between digits
+    "123_"
+    "1__"
+    "0_"
+    "123_N"
+    "0x_FF"
+    "0xFF_"
+    "2r_1010"
+    "2r1010_"
+    "3_6r11")
+
+  ;; issue-29 -- error should report full number with underscores
+  (are [s m] (thrown-with-msg? Exception m (edn/read-string s))
+    "123_"    #"Invalid number: 123_"
+    "123_N"   #"Invalid number: 123_N"
+    "0x_FF"   #"Invalid number: 0x_FF"))
 
 (deftest floats-test
   (are [s e] (= e (edn/read-string s))
@@ -525,11 +567,23 @@
     "##Inf;"  ##Inf
 
     ;; issue-7 -- Cannot read number ending with #
-    "[0##Inf]" [0 ##Inf])
-  
+    "[0##Inf]" [0 ##Inf]
+
+    ;; issue-29 -- Support underscore literals
+    "3.14_15"      3.1415
+    "3.14_15_92"   3.141592
+    "3.14_15_92_65_35_89_79" 3.14159265358979
+    "1_234.56_78"  1234.5678
+    "1_500e10"     1500e10
+    "1.5e1_0"      1.5e10
+    "1_5.2_5e1_0"  15.25e10
+    "-1_5.2_5e-1_0" -15.25e-10
+    "1_234.56_78M" 1234.5678M
+    "1_5.2_5e1_0M" 15.25e10M)
+
   ;; not in spec
   (Double/.isNaN (edn/read-string "##NaN"))
-  
+
   (are [s] (thrown? Exception (edn/read-string s))
     "1m"
     "1.1.1"
@@ -544,7 +598,18 @@
     "##Inf-1"
     "#{##Inf-1}"
     "##NaN1"
-    "##Infx")
+    "##Infx"
+
+    ;; issue-29 -- underscores must be between digits
+    "123_.5"
+    "123._5"
+    "123_e10"
+    "123e_10"
+    "123e10_"
+    "1.5_"
+    "123.45_M"
+    "1_M"
+    "1e+_5")
 
   ;; issue-10 -- error should report full symbol that was read
   (are [s m] (thrown-with-msg? Exception m (edn/read-string s))
@@ -800,7 +865,12 @@
 
     ;; leading zero means octal in ratios too, same as in plain ints
     "010/2"       4
-    "1/010"       1/8)
+    "1/010"       1/8
+
+    ;; issue-29 -- Support underscore literals
+    "1_0/3"       10/3
+    "1/1_0"       1/10
+    "0xF_F/0x0_2" 255/2)
 
   (are [s] (thrown? Exception (edn/read-string s))
     "1/"
@@ -809,7 +879,12 @@
     "1/2.2"
     "1/2/3"
     "08/1"
-    "1/08"))
+    "1/08"
+
+    ;; issue-29 -- underscores must be between digits
+    "1_/2"
+    "1/_2"
+    "1/2_"))
 
 ;; not in spec
 (deftest meta-test

@@ -717,10 +717,17 @@ public class EdnParser {
       char ch = buf[pos];
       if (ch >= '0' && ch <= '9') {
         val = val * 10 + ch - '0';
+      } else if (ch == '_' && pos > start) {
+        // skip underscore between digits, e.g. 1_000_000
       } else if (isNumberBoundary(ch)) {
         int digits = pos - start;
         // empty, e.g. denominator in "1/]"
         if (digits == 0) {
+          break;
+        }
+
+        // trailing underscore, e.g. 123_
+        if (buf[pos - 1] == '_') {
           break;
         }
 
@@ -835,6 +842,11 @@ public class EdnParser {
   }
 
   public Number finalizeFloat(char[] buf, int start, int end) {
+    for (int i = start; i < end; ++i) {
+      if (buf[i] == '_') {
+        return finalizeFloatUnderscores(buf, start, end);
+      }
+    }
     int len = end - start;
     if (buf[end - 1] == 'M') {
       return new BigDecimal(buf, start, len - 1);
@@ -843,9 +855,37 @@ public class EdnParser {
     }
   }
 
+  // underscores are allowed between digits only, like in Java: 3.14_15, 1_500e1_0
+  public Number finalizeFloatUnderscores(char[] buf, int start, int end) {
+    char[] clean = new char[end - start];
+    int cleanLen = 0;
+    for (int i = start; i < end; ++i) {
+      char ch = buf[i];
+      if (ch == '_') {
+        char prev = i > start ? buf[i - 1] : 0;
+        char next = i < end - 1 ? buf[i + 1] : 0;
+        boolean prevOk = (prev >= '0' && prev <= '9') || prev == '_';
+        boolean nextOk = (next >= '0' && next <= '9') || next == '_';
+        if (!prevOk || !nextOk) {
+          throw new RuntimeException("Invalid number: " + new String(buf, start, end - start) + context());
+        }
+      } else {
+        clean[cleanLen++] = ch;
+      }
+    }
+    if (clean[cleanLen - 1] == 'M') {
+      return new BigDecimal(clean, 0, cleanLen - 1);
+    } else {
+      return Double.parseDouble(new String(clean, 0, cleanLen));
+    }
+  }
+
   public Number finalizeInt(char[] buf, int start, int radixPos, int end) {
     int radix = -1;
     boolean forceBigInt = false;
+    boolean octal = false;
+    int tokenStart = start;
+    int tokenEnd = end;
 
     if (end == start) {
       throw new RuntimeException("Invalid number" + context());
@@ -868,6 +908,7 @@ public class EdnParser {
         start = start + 2;
       } else if (end - start >= 2) {
         radix = 8;
+        octal = true;
         start = start + 1;
       }
     }
@@ -876,19 +917,47 @@ public class EdnParser {
       radix = 10;
     }
 
+    String str = stripUnderscores(buf, start, end, octal, tokenStart, tokenEnd);
+
     if (forceBigInt) {
-      String str = new String(buf, start, end - start);
       BigInteger bn = new BigInteger(str, radix);
       return BigInt.fromBigInteger(bn);
     }
 
-    String str = new String(buf, start, end - start);
     try {
       return Long.valueOf(Long.parseLong(str, radix));
     } catch (Exception e) {
       BigInteger bn = new BigInteger(str, radix);
       return BigInt.fromBigInteger(bn);
     }
+  }
+
+  // underscores are allowed between digits only, like in Java: 1_000, 0xFF_EC, 2r1010_1010.
+  // leading 0 of an octal literal counts as a digit: 0_777
+  public String stripUnderscores(char[] buf, int start, int end, boolean octal, int tokenStart, int tokenEnd) {
+    int underscores = 0;
+    for (int i = start; i < end; ++i) {
+      if (buf[i] == '_') {
+        ++underscores;
+      }
+    }
+
+    if (underscores == 0) {
+      return new String(buf, start, end - start);
+    }
+
+    if (buf[end - 1] == '_' || (buf[start] == '_' && !octal)) {
+      throw new RuntimeException("Invalid number: " + new String(buf, tokenStart, tokenEnd - tokenStart) + context());
+    }
+
+    char[] clean = new char[end - start - underscores];
+    int cleanLen = 0;
+    for (int i = start; i < end; ++i) {
+      if (buf[i] != '_') {
+        clean[cleanLen++] = buf[i];
+      }
+    }
+    return new String(clean, 0, cleanLen);
   }
 
   public Number readNumberNegative() {

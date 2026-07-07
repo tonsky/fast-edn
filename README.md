@@ -171,6 +171,19 @@ In Fast EDN, ratios can be specified with arbitrary integers:
 ; => 255/2
 ```
 
+Numbers can have underscores, same as in Java. Underscores are only allowed between digits (not at the start or end of a number, and not adjacent to `.`, exponent, radix prefix or `N`/`M` suffix):
+
+```clojure
+(clojure.edn/read-string "1_000_000")
+; => NumberFormatException: Invalid number: 1_000_000
+
+(fast-edn.core/read-string "1_000_000")
+; => 1000000
+
+(fast-edn.core/read-string "[3.14_15 0xFF_EC_DE_5E 1_500e10 07_77 2r1010_1010 36rZ_Z]")
+; => [3.1415 4293713502 1.5E13 511 170 1295]
+```
+
 Symbols/keywords can have slashes anywhere, first slash is ns separator. Clojure allows them _almost_ anywhere but rules for when it doesn’t are _weird_:
 
 ```clojure
