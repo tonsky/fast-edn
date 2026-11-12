@@ -17,6 +17,7 @@ public class EdnParser {
   public final IFn     defaultDataReader;
   public final boolean throwOnEOF;
   public final Object  eofValue;
+  public final boolean keywordCache;
 
   public char[]   readBuf;
   public char[]   accumulator;
@@ -33,11 +34,16 @@ public class EdnParser {
   public int      discardDepth;
 
   public EdnParser(boolean countLines, int bufferSize, ILookup dataReaders, IFn defaultDataReader, boolean throwOnEOF, Object eofValue, Reader reader) {
+    this(countLines, bufferSize, dataReaders, defaultDataReader, throwOnEOF, eofValue, true, reader);
+  }
+
+  public EdnParser(boolean countLines, int bufferSize, ILookup dataReaders, IFn defaultDataReader, boolean throwOnEOF, Object eofValue, boolean keywordCache, Reader reader) {
     this.countLines = countLines;
     this.dataReaders = dataReaders;
     this.defaultDataReader = defaultDataReader;
     this.throwOnEOF = throwOnEOF;
     this.eofValue = eofValue;
+    this.keywordCache = keywordCache;
 
     this.readBuf = new char[bufferSize];
     this.accumulator = new char[32];
@@ -671,7 +677,21 @@ public class EdnParser {
     return finalizeKeyword(accumulator, 0, slash, accumulatorLength);
   }
 
+  // Cache hit: the interned Keyword without building Strings and a Symbol (KeywordCache). Miss: the full path.
   public Keyword finalizeKeyword(char[] buf, int start, int slash, int end) {
+    if (!keywordCache || end <= start) {
+      return finalizeKeywordUncached(buf, start, slash, end); // cache off, or empty token (throws)
+    }
+    int h = KeywordCache.hash(buf, start, end);
+    Keyword kw = KeywordCache.get(h, buf, start, end);
+    if (kw == null) {
+      kw = finalizeKeywordUncached(buf, start, slash, end); // throws on invalid tokens, so they are never cached
+      KeywordCache.put(h, kw);
+    }
+    return kw;
+  }
+
+  public Keyword finalizeKeywordUncached(char[] buf, int start, int slash, int end) {
     if (end == start) {
       throw new RuntimeException("Keyword can't be empty" + context());
     }
