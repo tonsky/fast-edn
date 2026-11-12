@@ -390,6 +390,71 @@
     ;; issue-24 -- Cannot parse :/!/!
     ":/!/!"))
 
+(deftest keyword-cache-test
+  (testing "returns the interned keyword, also on cache hits"
+    (dotimes [_ 3]
+      (is (identical? :ns/sym (edn/read-string ":ns/sym")))
+      (is (identical? :sym (edn/read-string ":sym")))
+      (is (identical? :/ (edn/read-string ":/")))))
+
+  (testing "slashes: cached keyword is matched as ns + / + name"
+    (dotimes [_ 3]
+      (are [s ns name] (identical? (keyword ns name) (edn/read-string s))
+        ":ns//"       "ns" "/"
+        ":ns///"      "ns" "//"
+        ":ns/sym/sym" "ns" "sym/sym"
+        ":ns/sym/"    "ns" "sym/"
+        ":a/b"        "a"  "b"
+        ":ab"         nil  "ab")))
+
+  (testing "invalid keywords throw even when similar valid ones are cached"
+    (edn/read-string "[:a :ns/a]")
+    (are [s] (thrown? Exception (edn/read-string s))
+      ":"
+      ":ns/"
+      "::a"
+      "[:a :a/]"))
+
+  (testing "many distinct keywords (evictions), read twice, stay correct and identical"
+    (let [kws (vec (for [i (range 20000)]
+                     (if (even? i) (keyword (str "k" i)) (keyword (str "ns" (mod i 7)) (str "n" i)))))
+          s   (pr-str kws)]
+      (dotimes [_ 2]
+        (let [res (edn/read-string s)]
+          (is (= kws res))
+          (is (every? true? (map identical? kws res)))))))
+
+  (testing "same length, same first/middle/last chars (equal cheap hash, only positions 2 and 4 differ)"
+    (let [kws [:abXcYde :abZcWde :abXcWde :abZcYde :abXcYde :abZcWde]]
+      (is (= kws (edn/read-string (pr-str kws))))))
+
+  (testing "keywords crossing buffer boundaries"
+    (let [kws (vec (for [i (range 200)] (keyword (str "long-keyword-name-" i) (str "and-a-long-name-" i))))
+          s   (pr-str kws)]
+      (dotimes [_ 2]
+        (is (= kws (edn/read-once {:buffer 10} (java.io.StringReader. s)))))))
+
+  (testing "numbered keywords (differ only at the end), more than fit in one set, read in rotation"
+    (let [kws (vec (for [i (range 3000)] (keyword "order" (str "field-" i))))
+          s   (pr-str kws)]
+      (dotimes [_ 3]
+        (is (every? true? (map identical? kws (edn/read-string s)))))))
+
+  (testing ":keyword-cache false gives the same interned keywords and errors"
+    (let [kws [:a :ns/a :ns// :ns/sym/sym :a :ns/a]]
+      (dotimes [_ 2]
+        (is (every? true? (map identical? kws (edn/read-string {:keyword-cache false} (pr-str kws)))))))
+    (are [s] (thrown? Exception (edn/read-string {:keyword-cache false} s))
+      ":"
+      ":ns/"
+      "::a"))
+
+  (testing "concurrent readers"
+    (let [kws  (vec (for [i (range 5000)] (keyword (str "c" (mod i 300)) (str "k" (mod i 1300)))))
+          s    (pr-str kws)
+          futs (doall (for [_ (range 8)] (future (dotimes [_ 20] (assert (= kws (edn/read-string s)))) :ok)))]
+      (is (every? #(= :ok @%) futs)))))
+
 
 (deftest integers-test
   (are [s e] (let [v (edn/read-string s)]

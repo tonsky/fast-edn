@@ -70,7 +70,10 @@
                     found for a tag, be called with the tag and the value
      :buffer      - Int, size of buffer to read from source (1024 by default)
      :count-lines - Boolean, whether to report line/column numbers in exceptions
-                    (false by default)"
+                    (false by default)
+     :keyword-cache - Boolean, reuse recently read keywords (true by default).
+                      Set to false for data where almost every keyword is new,
+                      e.g. generated keys like :user-8f3a91c2"
   ([source]
    (EdnParser. false 1024 default-data-readers nil true nil (reader source)))
   ([opts source]
@@ -81,6 +84,7 @@
      (:default opts)
      (not (contains? opts :eof))
      (:eof opts)
+     (boolean (:keyword-cache opts true))
      (reader source))))
 
 (defn set-reader
@@ -114,7 +118,10 @@
                     found for a tag, be called with the tag and the value
      :buffer      - Int, size of buffer to read from source (1024 by default)
      :count-lines - Boolean, whether to report line/column numbers in exceptions
-                    (false by default)"
+                    (false by default)
+     :keyword-cache - Boolean, reuse recently read keywords (true by default).
+                      Set to false for data where almost every keyword is new,
+                      e.g. generated keys like :user-8f3a91c2"
   ([source]
    (with-open [reader (reader source)]
      (-> (EdnParser. false 1024 default-data-readers nil false nil reader)
@@ -139,7 +146,10 @@
                     found for a tag, be called with the tag and the value
      :buffer      - Int, size of buffer to read from source (1024 by default)
      :count-lines - Boolean, whether to report line/column numbers in exceptions
-                    (false by default)"
+                    (false by default)
+     :keyword-cache - Boolean, reuse recently read keywords (true by default).
+                      Set to false for data where almost every keyword is new,
+                      e.g. generated keys like :user-8f3a91c2"
   ([s]
    (when s
      (-> (EdnParser. false 1024 default-data-readers nil false nil (StringReader. s))
