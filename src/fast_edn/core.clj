@@ -6,7 +6,7 @@
    [java.io ByteArrayInputStream CharArrayReader File FileReader InputStream InputStreamReader Reader StringReader]
    [java.time ZonedDateTime ZoneOffset]
    [java.util Date]
-   [fast_edn EdnParser]))
+   [fast_edn EdnParser EdnWriter]))
 
 (defn- merge [m1 m2]
   (if (empty? m2)
@@ -148,3 +148,19 @@
    (when s
      (-> ^EdnParser (parser opts (StringReader. s))
        (.readNext)))))
+
+(defn write-string
+  "Writes x as an EDN string, identical to pr-str with *print-length* and *print-level* nil, *print-readably*
+   true and *print-dup*, *print-meta*, *print-namespace-maps* false, independent of their current bindings.
+   Values without a fast path are printed through print-method; a print-method defined for one of Clojure's
+   own types is not used.
+
+   Options:
+
+   :strict  if true, throw for values without an EDN form (records, objects, regexes, ...) instead of printing
+            them through print-method. #inst and #uuid values are allowed; :type metadata is ignored."
+  (^String [x]
+   (EdnWriter/writeString x false))
+  (^String [x opts]
+   (EdnWriter/writeString x (boolean (:strict opts)))))
+
