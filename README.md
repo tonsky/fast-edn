@@ -149,6 +149,22 @@ In Fast EDN:
     (repeatedly #(fast-edn.core/read-next p))))
 ```
 
+## Writing
+
+`write-string` writes EDN, identical to `pr-str` with `*print-length*` and `*print-level*` nil, `*print-readably*` true and `*print-dup*`, `*print-meta*`, `*print-namespace-maps*` false, whatever the caller has bound:
+
+```clojure
+(edn/write-string {:a [1 2.5 "x"] :b #{\c 'd}})
+; => "{:a [1 2.5 \"x\"], :b #{\\c d}}"
+```
+
+Clojure’s own types (scalars, collections, `#inst`, `#uuid`) are written directly, 6–60 times faster than `pr-str`. Every other value (records, custom types) goes through `print-method`. With `{:strict true}` values without an EDN form throw instead:
+
+```clojure
+(edn/write-string (Object.) {:strict true})
+; => IllegalArgumentException: No EDN form for java.lang.Object
+```
+
 ## Compatibility
 
 Fast EDN would read almost 100% of what clojure.edn would. Exceptions to that rule are edge cases:
